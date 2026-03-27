@@ -638,7 +638,7 @@ function getSessionMetrics(s) {
   return {
     tokens: hasPeriod ? ((s.period_tokens_in || 0) + (s.period_tokens_out || 0)) : ((s.max_tokens_in || 0) + (s.max_tokens_out || 0)),
     cost: hasPeriod ? (s.period_cost_usd || 0) : (s.max_cost_usd || 0),
-    duration: hasPeriod ? Math.round((s.period_duration_ms || 0) / 1000) : (s.duration_seconds || 0),
+    duration: s.duration_seconds || 0,  // Always lifetime — duration delta is meaningless
   };
 }
 
