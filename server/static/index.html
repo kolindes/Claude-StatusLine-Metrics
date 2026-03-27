@@ -23,10 +23,10 @@
       </div>
 
       <nav class="sidebar-nav">
-        <a data-page="overview" data-shortcut="1" class="active">Overview</a>
-        <a data-page="ratelimits" data-shortcut="2">Rate Limits</a>
-        <a data-page="context" data-shortcut="3">Context</a>
-        <a data-page="global" data-shortcut="4">Global Stats</a>
+        <a data-page="overview" data-shortcut="1" class="active" tabindex="0">Overview</a>
+        <a data-page="ratelimits" data-shortcut="2" tabindex="0">Rate Limits</a>
+        <a data-page="context" data-shortcut="3" tabindex="0">Context</a>
+        <a data-page="global" data-shortcut="4" tabindex="0">Global Stats</a>
       </nav>
 
       <div class="sidebar-projects">
@@ -166,7 +166,7 @@
       <section id="page-ratelimits" class="page-section">
 
         <!-- Current Status -->
-        <div class="kpi-row" style="margin-bottom:24px;grid-template-columns:1fr 1fr">
+        <div class="kpi-row" style="margin-bottom:24px">
           <div class="kpi-card" style="padding:24px 28px">
             <div class="kpi-label" style="font-size:0.8rem;margin-bottom:12px">5-HOUR LIMIT</div>
             <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:12px">
@@ -242,7 +242,7 @@
       <section id="page-context" class="page-section">
 
         <!-- KPI Row: 2 cards -->
-        <div class="kpi-row" style="grid-template-columns: 1fr 1fr">
+        <div class="kpi-row">
           <div class="kpi-card">
             <div class="kpi-label">Compressions</div>
             <div class="kpi-value accent-yellow" id="ctx-compressions">0</div>

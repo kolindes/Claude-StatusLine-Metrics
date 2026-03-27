@@ -355,7 +355,8 @@ function createRateLimitsChart(canvasId) {
           ...CHART_DEFAULTS.plugins.tooltip,
           callbacks: {
             label(ctx) {
-              return ctx.dataset.label + ': ' + ctx.parsed.y.toFixed(1) + '%';
+              const val = ctx.parsed ? ctx.parsed.y : 0;
+              return ctx.dataset.label + ': ' + (val != null ? val.toFixed(1) : '0') + '%';
             },
           },
         },
@@ -410,7 +411,8 @@ function createContextChart(canvasId) {
           ...CHART_DEFAULTS.plugins.tooltip,
           callbacks: {
             label(ctx) {
-              return 'Context: ' + ctx.parsed.y.toFixed(1) + '%';
+              const val = ctx.parsed ? ctx.parsed.y : 0;
+              return 'Context: ' + (val != null ? val.toFixed(1) : '0') + '%';
             },
           },
         },

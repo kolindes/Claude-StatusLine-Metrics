@@ -36,6 +36,7 @@ const TIME_RANGES = {
 /* ── Count Formatter (stars, etc.) ────────────────────────────── */
 
 function fmtCount(n) {
+  if (n == null || isNaN(n)) return '0';
   if (n >= 1000000000) return (n / 1000000000).toFixed(1) + 'B';
   if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
   if (n >= 1000) return (n / 1000).toFixed(1) + 'k';
@@ -120,21 +121,6 @@ function plural(n, one, many) {
   return n === 1 ? n + ' ' + one : n + ' ' + many;
 }
 
-/**
- * Escape HTML special characters to prevent XSS when inserting
- * into the DOM via innerHTML (data comes from our own local API,
- * but defense-in-depth is always good practice).
- */
-function esc(str) {
-  if (str == null) return '';
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
 /* ── DOM Helpers ──────────────────────────────────────────────── */
 
 function $(sel) { return document.querySelector(sel); }
@@ -191,7 +177,8 @@ function setKpiValue(sel, rawValue, formatType) {
       card.classList.remove('data-update');
       void card.offsetWidth; /* force reflow */
       card.classList.add('data-update');
-      setTimeout(function() { card.classList.remove('data-update'); }, 500);
+      if (card._flickerTimer) clearTimeout(card._flickerTimer);
+      card._flickerTimer = setTimeout(function() { card.classList.remove('data-update'); }, 500);
     }
   }
 }
@@ -511,11 +498,6 @@ function updateKpiCards(summary, rateLimits, health) {
     const recCount = health.total_records || 0;
     setText('#kpi-active-detail', plural(recCount, 'total record', 'total records'));
 
-    // P3: Live pulse indicator
-    const pulseLive = $('#pulse-live');
-    if (pulseLive) {
-      pulseLive.classList.toggle('visible', (health.active_sessions || 0) > 0);
-    }
   }
 
   // 3.1: KPI Trend badges
@@ -1399,7 +1381,7 @@ function startPolling() {
 
 function setupKeyboardShortcuts() {
   document.addEventListener('keydown', function(e) {
-    if (e.target.tagName === 'INPUT') return;
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) return;
     if (e.key === '1') navigateTo('overview');
     if (e.key === '2') navigateTo('ratelimits');
     if (e.key === '3') navigateTo('context');
@@ -1508,10 +1490,11 @@ async function init() {
 
 // Wait for DOM and Chart.js (with retry for CDN fallback race)
 document.addEventListener('DOMContentLoaded', function() {
+  var initRetries = 0;
   function tryInit() {
     if (typeof Chart !== 'undefined') {
       init();
-    } else {
+    } else if (initRetries++ < 20) {
       setTimeout(tryInit, 500);
     }
   }

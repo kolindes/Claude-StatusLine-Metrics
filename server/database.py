@@ -190,6 +190,10 @@ MIGRATIONS: list[tuple[int, str, str]] = [
         CREATE INDEX IF NOT EXISTS idx_metrics_rate7d_resets
             ON metrics(rate_7d_resets);
     """),
+    (3, "Drop unused rate_estimates table", """
+        DROP TABLE IF EXISTS rate_estimates;
+        DROP INDEX IF EXISTS idx_rate_est_window_ts;
+    """),
 ]
 
 # ── Connection helpers ───────────────────────────────────────────────
@@ -663,9 +667,12 @@ def get_all_projects_summary(
     acct_clause, acct_params = _account_filter(account)
     ts_clause = ""
     ts_params: list[Any] = []
-    if from_ts is not None and to_ts is not None:
-        ts_clause = " AND ts >= ? AND ts <= ?"
-        ts_params = [from_ts, to_ts]
+    if from_ts is not None:
+        ts_clause += " AND ts >= ?"
+        ts_params.append(from_ts)
+    if to_ts is not None:
+        ts_clause += " AND ts <= ?"
+        ts_params.append(to_ts)
     params = ts_params + acct_params
     sql = f"""
         WITH session_deltas AS (
@@ -696,6 +703,7 @@ def get_all_projects_summary(
     """
     row = conn.execute(sql, params).fetchone()
     result = _row_to_dict(row) if row else {}
+    # models_used intentionally empty for aggregate endpoint
     result["models_used"] = []
     return result
 
@@ -902,6 +910,9 @@ def get_global_stats(
 
     Merges historical aggregates (from cleanup) with live session deltas.
     """
+    # NOTE: global_stats table has no account column.
+    # Historical data is always global; only live data is account-filtered.
+
     # 1. Aggregated historical data from global_stats
     gs_sql = """
         SELECT

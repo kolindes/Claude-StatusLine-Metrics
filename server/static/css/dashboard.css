@@ -158,7 +158,7 @@ body::after {
     rgba(255, 140, 0, 0.008) 4px
   );
   pointer-events: none;
-  z-index: 9999;
+  z-index: 1000;
   animation: scanline-drift 8s linear infinite;
 }
 
@@ -838,36 +838,6 @@ body::after {
 
 /* ── Progress Bars (Rate Limits) -- Power Bar Style ──────────── */
 
-.progress-group {
-  margin-bottom: 16px;
-}
-
-.progress-label {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  margin-bottom: 8px;
-}
-
-.progress-label .label-text {
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-secondary);
-}
-
-.progress-label .label-value {
-  font-family: var(--font-mono);
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--text-data);
-  font-variant-numeric: tabular-nums;
-  min-width: 4ch;
-  text-align: right;
-  text-shadow: 0 0 8px rgba(255, 140, 0, 0.3);
-}
-
 .progress-bar {
   height: 10px;
   background: var(--bg-panel);
@@ -934,15 +904,6 @@ body::after {
 @keyframes pulse-bar {
   0%, 100% { opacity: 1; box-shadow: 0 0 12px var(--red-glow); }
   50% { opacity: 0.75; box-shadow: 0 0 20px var(--red-glow), 0 0 30px rgba(239, 100, 97, 0.2); }
-}
-
-.progress-detail {
-  font-family: var(--font-mono);
-  font-size: 0.6rem;
-  color: var(--text-muted);
-  margin-top: 6px;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.05em;
 }
 
 /* ── Tables ──────────────────────────────────────────────────── */
@@ -1151,38 +1112,10 @@ body::after {
   color: var(--text-muted);
 }
 
-.empty-state .empty-title {
-  font-family: var(--font-mono);
-  font-size: 0.9rem;
-  font-weight: 400;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-secondary);
-  margin-bottom: 8px;
-}
-
 .empty-state .empty-desc {
   font-family: var(--font-mono);
   font-size: 0.75rem;
   letter-spacing: 0.04em;
-}
-
-/* ── Loading Indicator ───────────────────────────────────────── */
-
-.loading-dot {
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  border-radius: 1px;
-  background: var(--primary);
-  margin-right: 4px;
-  animation: pulse-dot 1.2s infinite;
-  box-shadow: 0 0 6px var(--primary-glow);
-}
-
-@keyframes pulse-dot {
-  0%, 100% { opacity: 0.3; }
-  50% { opacity: 1; }
 }
 
 /* ── Scrollbar ───────────────────────────────────────────────── */
@@ -1231,41 +1164,6 @@ body::after {
   text-shadow: 0 0 6px var(--red-glow);
 }
 .kpi-trend.neutral { display: none; }
-
-/* ── Live Pulse Indicator ────────────────────────────────────── */
-
-.pulse-live {
-  display: none;
-  align-items: center;
-  gap: 6px;
-  font-family: var(--font-mono);
-  font-size: 0.65rem;
-  font-weight: 500;
-  color: var(--green);
-  margin-right: 8px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  text-shadow: 0 0 8px var(--green-glow);
-}
-
-.pulse-live.visible {
-  display: inline-flex;
-}
-
-.pulse-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--green);
-  display: inline-block;
-  animation: pulse-live-dot 2s ease-in-out infinite;
-  box-shadow: 0 0 8px var(--green-glow), 0 0 16px rgba(74, 222, 128, 0.2);
-}
-
-@keyframes pulse-live-dot {
-  0%, 100% { opacity: 1; transform: scale(1); box-shadow: 0 0 8px var(--green-glow); }
-  50% { opacity: 0.4; transform: scale(0.75); box-shadow: 0 0 16px var(--green-glow), 0 0 24px rgba(74, 222, 128, 0.3); }
-}
 
 /* ── Session Status Dot ──────────────────────────────────────── */
 
@@ -1351,6 +1249,16 @@ body::after {
 ::selection {
   background: rgba(255, 140, 0, 0.2);
   color: var(--primary-bright);
+}
+
+/* ── Page-specific KPI grid overrides ─────────────────────────── */
+
+#page-ratelimits .kpi-row,
+#page-context .kpi-row { grid-template-columns: 1fr 1fr; }
+
+@media (max-width: 380px) {
+  #page-ratelimits .kpi-row,
+  #page-context .kpi-row { grid-template-columns: 1fr; }
 }
 
 /* ── Responsive: Tablet (max 1024px) ─────────────────────────── */
