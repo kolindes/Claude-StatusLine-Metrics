@@ -897,38 +897,43 @@ def get_global_stats(
     gs_row = conn.execute(gs_sql).fetchone()
     hist = _row_to_dict(gs_row) if gs_row else {}
 
-    # 2. Live session deltas from current metrics
+    # 2. Live cumulative totals from sessions table (real lifetime values)
     acct_clause, acct_params = _account_filter(account)
     live_sql = f"""
-        WITH session_deltas AS (
+        SELECT
+            COALESCE(SUM(max_tokens_in), 0)    AS live_tokens_in,
+            COALESCE(SUM(max_tokens_out), 0)   AS live_tokens_out,
+            COALESCE(SUM(last_cache_write), 0) AS live_cache_write,
+            COALESCE(SUM(last_cache_read), 0)  AS live_cache_read,
+            COALESCE(SUM(max_cost_usd), 0)     AS live_cost,
+            COALESCE(SUM(max_duration_ms), 0)  AS live_duration,
+            COUNT(*)                             AS live_sessions,
+            0 AS live_lines_added,
+            0 AS live_lines_removed
+        FROM sessions
+        WHERE 1=1 {acct_clause}
+    """
+    live_row = conn.execute(live_sql, acct_params).fetchone()
+    live = _row_to_dict(live_row) if live_row else {}
+
+    # Lines added/removed: from metrics (sessions table doesn't track these)
+    lines_sql = f"""
+        SELECT
+            COALESCE(SUM(d_la), 0) AS live_lines_added,
+            COALESCE(SUM(d_lr), 0) AS live_lines_removed
+        FROM (
             SELECT
-                session_id,
-                MAX(tokens_in)   - MIN(tokens_in)   AS d_in,
-                MAX(tokens_out)  - MIN(tokens_out)  AS d_out,
-                MAX(cache_write) - MIN(cache_write) AS d_cw,
-                MAX(cache_read)  - MIN(cache_read)  AS d_cr,
-                MAX(cost_usd)    - MIN(cost_usd)    AS d_cost,
-                MAX(duration_ms) - MIN(duration_ms) AS d_dur,
                 MAX(lines_added) - MIN(lines_added) AS d_la,
                 MAX(lines_removed) - MIN(lines_removed) AS d_lr
             FROM metrics
             WHERE 1=1 {acct_clause}
             GROUP BY session_id
         )
-        SELECT
-            COALESCE(SUM(d_in), 0)  AS live_tokens_in,
-            COALESCE(SUM(d_out), 0) AS live_tokens_out,
-            COALESCE(SUM(d_cw), 0)  AS live_cache_write,
-            COALESCE(SUM(d_cr), 0)  AS live_cache_read,
-            COALESCE(SUM(d_cost), 0) AS live_cost,
-            COALESCE(SUM(d_dur), 0)  AS live_duration,
-            COUNT(*)                  AS live_sessions,
-            COALESCE(SUM(d_la), 0)   AS live_lines_added,
-            COALESCE(SUM(d_lr), 0)   AS live_lines_removed
-        FROM session_deltas
     """
-    live_row = conn.execute(live_sql, acct_params).fetchone()
-    live = _row_to_dict(live_row) if live_row else {}
+    lines_row = conn.execute(lines_sql, acct_params).fetchone()
+    if lines_row:
+        live["live_lines_added"] = lines_row["live_lines_added"]
+        live["live_lines_removed"] = lines_row["live_lines_removed"]
 
     # 3. Per-project breakdown
     proj_sql = """
