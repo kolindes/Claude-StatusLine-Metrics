@@ -2,6 +2,8 @@
 
 Collect and visualize Claude Code metrics. A lightweight client snippet in statusline.sh + SQLite backend + real-time dashboard.
 
+> **Tip:** You can ask Claude to auto-configure this for you. See [Auto-Setup via Claude](#auto-setup-via-claude) below.
+
 ```
 statusline.sh (each Claude)  -->  metrics-server (SQLite)  -->  Dashboard (:9177)
       fire-and-forget                  single host                  browser
@@ -167,26 +169,18 @@ Or in Git Bash: `~/.claude/metrics/config` (same thing).
 
 That's it. The Windows statusline.sh will now send metrics to .100.
 
-### C. Remote Server (over the internet / VPN)
+### C. Remote Server
 
-```
-  +---------------+       +---------------+       +---------------+
-  |  Laptop       |       |  Desktop      |       |  VPS (server) |
-  |  macOS        |       |  Windows      |       |  Linux         |
-  |               |       |               |       |                |
-  |  curl POST ---+------>|  curl POST ---+------>|  metrics-server|
-  |  vpn/tunnel   |  VPN  |  vpn/tunnel   |  VPN  |  :9177         |
-  +---------------+       +---------------+       +---------------+
-```
+Any machine that can reach the server over the network can send metrics — just point the client config to the server's IP.
 
 **On each client** (`~/.claude/metrics/config`):
 
 ```bash
-METRICS_SERVER_URL="http://your-vps-ip:9177/api/metrics"
+METRICS_SERVER_URL="http://your-server-ip:9177/api/metrics"
 METRICS_API_KEY="your-secret-key-here"
 ```
 
-**On the server:** set the API key via config or environment variable:
+**On the server:**
 
 ```bash
 export METRICS_API_KEY="your-secret-key-here"
@@ -223,8 +217,8 @@ METRICS_ACCOUNT="pro-main"
 METRICS_SERVER_URL="http://192.168.1.100:9177/api/metrics"
 METRICS_ACCOUNT="max-work"
 
-# Server over VPN with authentication
-METRICS_SERVER_URL="http://10.8.0.1:9177/api/metrics"
+# Remote server with authentication
+METRICS_SERVER_URL="http://your-server-ip:9177/api/metrics"
 METRICS_API_KEY="abc123secret"
 METRICS_ACCOUNT="personal"
 ```
