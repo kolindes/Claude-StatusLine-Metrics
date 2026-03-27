@@ -608,8 +608,8 @@ function updateProjectsBarChart(summaries, projectsList) {
   // Sort by tokens descending
   const indices = data.map(function(_, i) { return i; });
   indices.sort(function(a, b) { return data[b] - data[a]; });
-  var sortedLabels = indices.map(function(i) { return labels[i]; });
-  var sortedData = indices.map(function(i) { return data[i]; });
+  let sortedLabels = indices.map(function(i) { return labels[i]; });
+  let sortedData = indices.map(function(i) { return data[i]; });
 
   // Limit to top 15 projects for readability
   if (sortedLabels.length > 15) {
@@ -1475,21 +1475,21 @@ async function init() {
   }).catch(function() {});
 
   // Fetch GitHub stars (non-blocking, best-effort, 5-min localStorage cache)
-  var cached = localStorage.getItem('sm_gh_stars');
-  var cacheTs = parseInt(localStorage.getItem('sm_gh_stars_ts') || '0');
+  const cached = localStorage.getItem('sm_gh_stars');
+  const cacheTs = parseInt(localStorage.getItem('sm_gh_stars_ts') || '0', 10);
   if (cached && Date.now() - cacheTs < 300000) {
-    var el = document.getElementById('github-stars-count');
-    if (el) el.textContent = cached;
+    const starsEl = document.getElementById('github-stars-count');
+    if (starsEl) starsEl.textContent = cached;
   } else {
-    var ctrl = new AbortController();
-    var tid = setTimeout(function() { ctrl.abort(); }, 5000);
+    const ctrl = new AbortController();
+    const tid = setTimeout(function() { ctrl.abort(); }, 5000);
     fetch('https://api.github.com/repos/' + GITHUB_REPO, { signal: ctrl.signal })
       .then(function(r) { if (!r.ok) throw new Error(r.status); return r.json(); })
       .then(function(d) {
         if (d && typeof d.stargazers_count === 'number') {
-          var el = document.getElementById('github-stars-count');
-          var formatted = fmtCount(d.stargazers_count);
-          if (el) el.textContent = formatted;
+          const starsEl = document.getElementById('github-stars-count');
+          const formatted = fmtCount(d.stargazers_count);
+          if (starsEl) starsEl.textContent = formatted;
           localStorage.setItem('sm_gh_stars', formatted);
           localStorage.setItem('sm_gh_stars_ts', String(Date.now()));
         }
@@ -1501,7 +1501,7 @@ async function init() {
 
 // Wait for DOM and Chart.js (with retry for CDN fallback race)
 document.addEventListener('DOMContentLoaded', function() {
-  var initRetries = 0;
+  let initRetries = 0;
   function tryInit() {
     if (typeof Chart !== 'undefined') {
       init();
