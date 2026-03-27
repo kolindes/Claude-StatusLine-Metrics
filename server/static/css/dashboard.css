@@ -1007,6 +1007,46 @@ body::after {
   font-size: 0.82rem;
 }
 
+/* ── Sessions Pagination ─────────────────────────────────────── */
+
+.sessions-pagination {
+  text-align: center;
+  padding: 12px;
+}
+
+.sessions-pagination button {
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  padding: 4px 12px;
+  cursor: pointer;
+  clip-path: var(--clip-button);
+  transition: all 0.2s;
+  letter-spacing: 0.04em;
+}
+
+.sessions-pagination button:hover:not(:disabled) {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: var(--primary-subtle);
+  text-shadow: 0 0 6px var(--primary-glow);
+}
+
+.sessions-pagination button:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.sessions-pagination span {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  margin: 0 12px;
+  letter-spacing: 0.06em;
+}
+
 /* ── Stats Grid (Global Stats) ───────────────────────────────── */
 
 .stats-grid {

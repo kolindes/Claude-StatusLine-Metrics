@@ -19,6 +19,9 @@ const state = {
   refreshProgressTimer: null, // auto-refresh progress ring timer
   isRefreshing: false,
   pendingRefresh: false,
+  sessionsPage: 0,            // current page in sessions table
+  sessionsPerPage: 10,        // projects per page after grouping
+  _lastSessions: null,        // cached sessions for pagination re-render
 };
 
 const GITHUB_REPO = 'kolindes/Claude-StatusLine-Metrics';
@@ -289,6 +292,7 @@ function updateSubtitle() {
 function selectProject(projectId) {
   state.currentProject = projectId;
   state.prevKpi = {};
+  state.sessionsPage = 0;
 
   // Update sidebar active
   $$('.sidebar-projects a').forEach(function(a) {
@@ -382,7 +386,7 @@ async function loadOverview() {
   const tr = getTimeRange();
 
   // Build sessions query with optional project filter (C2) + time range
-  const sessionsParams = { limit: 200, from: tr.from, to: tr.to };
+  const sessionsParams = { limit: 500, from: tr.from, to: tr.to };
   if (state.currentProject !== null) {
     sessionsParams.project_id = state.currentProject;
   }
@@ -634,8 +638,11 @@ function getSessionMetrics(s) {
 }
 
 function renderSessionsTable(sessions) {
-  const tbody = $('#sessions-tbody');
+  var tbody = $('#sessions-tbody');
   if (!tbody) return;
+
+  // Cache sessions for pagination re-render
+  state._lastSessions = sessions;
 
   // Clear existing rows
   clearChildren(tbody);
@@ -646,55 +653,63 @@ function renderSessionsTable(sessions) {
   }
 
   // Group sessions by project_name
-  const nowTs = Math.floor(Date.now() / 1000);
-  const grouped = {};
+  var nowTs = Math.floor(Date.now() / 1000);
+  var grouped = {};
   sessions.forEach(function(s) {
-    const name = s.project_name || 'unknown';
+    var name = s.project_name || 'unknown';
     if (!grouped[name]) {
       grouped[name] = { project_name: name, model: s.model, sessions: 0, duration: 0, tokens: 0, cost: 0, last_seen_at: 0, has_active: false };
     }
-    const g = grouped[name];
+    var g = grouped[name];
     g.sessions++;
-    const m = getSessionMetrics(s);
+    var m = getSessionMetrics(s);
     g.duration += m.duration;
     g.tokens += m.tokens;
     g.cost += m.cost;
     if (s.last_seen_at > g.last_seen_at) { g.last_seen_at = s.last_seen_at; g.model = s.model; }
-    const seenDiff = s.last_seen_at ? (nowTs - s.last_seen_at) : Infinity;
+    var seenDiff = s.last_seen_at ? (nowTs - s.last_seen_at) : Infinity;
     if (seenDiff < 300) g.has_active = true;
   });
 
-  // Sort by cost descending
-  const projects = Object.values(grouped);
+  // Sort ALL projects by cost descending
+  var projects = Object.values(grouped);
   projects.sort(function(a, b) { return b.cost - a.cost; });
 
-  projects.forEach(function(p) {
-    const tr = document.createElement('tr');
+  // Pagination: slice projects for current page
+  var perPage = state.sessionsPerPage;
+  var totalPages = Math.ceil(projects.length / perPage);
+  if (state.sessionsPage >= totalPages) state.sessionsPage = Math.max(0, totalPages - 1);
+  var pageStart = state.sessionsPage * perPage;
+  var pageProjects = projects.slice(pageStart, pageStart + perPage);
 
-    const tdProj = document.createElement('td');
-    const dot = document.createElement('span');
+  // Render only current page of projects
+  pageProjects.forEach(function(p) {
+    var tr = document.createElement('tr');
+
+    var tdProj = document.createElement('td');
+    var dot = document.createElement('span');
     dot.className = 'status-dot ' + (p.has_active ? 'active' : 'idle');
     tdProj.appendChild(dot);
-    let label = truncate(p.project_name, 20);
+    var label = truncate(p.project_name, 20);
     if (p.sessions > 1) label += ' (' + p.sessions + ')';
     tdProj.appendChild(document.createTextNode(label));
     tr.appendChild(tdProj);
 
-    const tdModel = document.createElement('td');
+    var tdModel = document.createElement('td');
     tdModel.textContent = p.model || '--';
     tr.appendChild(tdModel);
 
-    const tdDur = document.createElement('td');
+    var tdDur = document.createElement('td');
     tdDur.className = 'cell-right';
     tdDur.textContent = fmtDur(p.duration, 's');
     tr.appendChild(tdDur);
 
-    const tdTok = document.createElement('td');
+    var tdTok = document.createElement('td');
     tdTok.className = 'cell-right';
     tdTok.textContent = fmtTokens(p.tokens);
     tr.appendChild(tdTok);
 
-    const tdCost = document.createElement('td');
+    var tdCost = document.createElement('td');
     tdCost.className = 'cell-right';
     tdCost.textContent = fmtCost(p.cost);
     tr.appendChild(tdCost);
@@ -702,33 +717,66 @@ function renderSessionsTable(sessions) {
     tbody.appendChild(tr);
   });
 
-  // Total row
-  let totalTokens = 0, totalCost = 0, totalDur = 0;
+  // TOTAL row -- always calculated from ALL sessions/projects
+  var totalTokens = 0, totalCost = 0, totalDur = 0;
   sessions.forEach(function(s) {
-    const m = getSessionMetrics(s);
+    var m = getSessionMetrics(s);
     totalTokens += m.tokens;
     totalCost += m.cost;
     totalDur += m.duration;
   });
-  const tfoot = document.createElement('tr');
+  var tfoot = document.createElement('tr');
   tfoot.className = 'sessions-total';
-  const tfLabel = document.createElement('td');
+  var tfLabel = document.createElement('td');
   tfLabel.colSpan = 2;
   tfLabel.textContent = 'TOTAL (' + plural(sessions.length, 'session', 'sessions') + ', ' + projects.length + ' projects)';
   tfoot.appendChild(tfLabel);
-  const tfDur = document.createElement('td');
+  var tfDur = document.createElement('td');
   tfDur.className = 'cell-right';
   tfDur.textContent = fmtDur(totalDur, 's');
   tfoot.appendChild(tfDur);
-  const tfTok = document.createElement('td');
+  var tfTok = document.createElement('td');
   tfTok.className = 'cell-right';
   tfTok.textContent = fmtTokens(totalTokens);
   tfoot.appendChild(tfTok);
-  const tfCost = document.createElement('td');
+  var tfCost = document.createElement('td');
   tfCost.className = 'cell-right';
   tfCost.textContent = fmtCost(totalCost);
   tfoot.appendChild(tfCost);
   tbody.appendChild(tfoot);
+
+  // Pagination controls (only if more than 1 page)
+  if (totalPages > 1) {
+    var paginationRow = document.createElement('tr');
+    var paginationTd = document.createElement('td');
+    paginationTd.colSpan = 5;
+    paginationTd.className = 'sessions-pagination';
+
+    var prevBtn = document.createElement('button');
+    prevBtn.textContent = '\u2190 Prev';
+    prevBtn.disabled = state.sessionsPage === 0;
+    prevBtn.addEventListener('click', function() {
+      state.sessionsPage--;
+      renderSessionsTable(state._lastSessions);
+    });
+
+    var info = document.createElement('span');
+    info.textContent = 'Page ' + (state.sessionsPage + 1) + ' of ' + totalPages;
+
+    var nextBtn = document.createElement('button');
+    nextBtn.textContent = 'Next \u2192';
+    nextBtn.disabled = state.sessionsPage >= totalPages - 1;
+    nextBtn.addEventListener('click', function() {
+      state.sessionsPage++;
+      renderSessionsTable(state._lastSessions);
+    });
+
+    paginationTd.appendChild(prevBtn);
+    paginationTd.appendChild(info);
+    paginationTd.appendChild(nextBtn);
+    paginationRow.appendChild(paginationTd);
+    tbody.appendChild(paginationRow);
+  }
 }
 
 /* ── Rate Limits Page ─────────────────────────────────────────── */
@@ -1347,6 +1395,7 @@ function setupTimeFilter() {
     btn.addEventListener('click', function() {
       state.timeRange = btn.dataset.range;
       state.prevKpi = {};
+      state.sessionsPage = 0;
       localStorage.setItem('sm_timeRange', btn.dataset.range);
       $$('.time-filter-bar button[data-range]').forEach(function(b) {
         b.classList.toggle('active', b === btn);
