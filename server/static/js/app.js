@@ -382,7 +382,7 @@ async function loadOverview() {
   const tr = getTimeRange();
 
   // Build sessions query with optional project filter (C2) + time range
-  const sessionsParams = { limit: 20, from: tr.from, to: tr.to };
+  const sessionsParams = { limit: 200, from: tr.from, to: tr.to };
   if (state.currentProject !== null) {
     sessionsParams.project_id = state.currentProject;
   }
