@@ -802,14 +802,14 @@ async function loadRateLimits() {
 
     if (estimates5h && estimates5h.samples > 0) {
       setText('#rl-est-5h-avg', fmtTokens(estimates5h.avg));
-      setText('#rl-est-5h-range', 'Min: ' + fmtTokens(estimates5h.min) + ' / Max: ' + fmtTokens(estimates5h.max));
-      setText('#rl-est-5h-samples', estimates5h.samples + ' samples');
+      setText('#rl-est-5h-range', 'Peak: ' + fmtTokens(estimates5h.max));
+      setText('#rl-est-5h-samples', estimates5h.samples + ' windows');
     }
 
     if (estimates7d && estimates7d.samples > 0) {
       setText('#rl-est-7d-avg', fmtTokens(estimates7d.avg));
-      setText('#rl-est-7d-range', 'Min: ' + fmtTokens(estimates7d.min) + ' / Max: ' + fmtTokens(estimates7d.max));
-      setText('#rl-est-7d-samples', estimates7d.samples + ' samples');
+      setText('#rl-est-7d-range', 'Peak: ' + fmtTokens(estimates7d.max));
+      setText('#rl-est-7d-samples', estimates7d.samples + ' windows');
     }
 
     if (prediction) {
