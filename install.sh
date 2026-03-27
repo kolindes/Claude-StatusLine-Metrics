@@ -90,7 +90,7 @@ fi
 
 # ── 4. Проверка порта ──
 echo ""
-if ss -tlnp 2>/dev/null | grep -q ':9177 '; then
+if (ss -tlnp 2>/dev/null || lsof -iTCP:9177 -sTCP:LISTEN 2>/dev/null) | grep -q '9177'; then
   warn "Порт 9177 уже занят. Остановите процесс или измените METRICS_PORT."
 fi
 
@@ -104,6 +104,11 @@ echo ""
 read -p "  Настроить автозапуск (systemd)? [y/N] " -n 1 -r
 echo
 if [[ $REPLY =~ ^[Yy]$ ]]; then
+  read -p "  Bind на все интерфейсы (0.0.0.0) для LAN доступа? [y/N] " -n 1 -r
+  echo
+  BIND_HOST="127.0.0.1"
+  [[ $REPLY =~ ^[Yy]$ ]] && BIND_HOST="0.0.0.0"
+
   mkdir -p ~/.config/systemd/user
   cat > ~/.config/systemd/user/statusline-metrics.service << SEOF
 [Unit]
@@ -115,7 +120,7 @@ Type=simple
 ExecStart=$(command -v python3) $SCRIPT_DIR/server/metrics_server.py
 Restart=always
 RestartSec=5
-Environment=METRICS_HOST=0.0.0.0
+Environment=METRICS_HOST=$BIND_HOST
 
 [Install]
 WantedBy=default.target

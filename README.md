@@ -1,50 +1,50 @@
 # Statusline Metrics
 
-Сбор и визуализация метрик Claude Code. Легковесный клиент в statusline.sh + SQLite + дашборд.
+Collect and visualize Claude Code metrics. A lightweight client snippet in statusline.sh + SQLite backend + real-time dashboard.
 
 ```
-statusline.sh (каждый Claude)  ──→  metrics-server (SQLite)  ──→  Dashboard (:9177)
-      fire-and-forget                    один хост                  браузер
+statusline.sh (each Claude)  -->  metrics-server (SQLite)  -->  Dashboard (:9177)
+      fire-and-forget                  single host                  browser
 ```
 
-## Что собирает
+## What It Collects
 
-Раз в минуту для каждого проекта:
+Once per minute, for each project:
 
-| Метрика | Описание |
-|---------|----------|
-| Context window | Использование контекста % и размер окна |
-| Rate limits | 5h и 7d лимиты (%, время до сброса) |
-| Tokens in/out | Входные и выходные токены (кумулятивно) |
-| Cache write/read | Токены кэша (запись, чтение) |
-| Cost | Стоимость сессии в USD |
-| Session time | Длительность работы |
-| API response time | Время ожидания API |
-| Lines added/removed | Строки кода |
+| Metric | Description |
+|--------|-------------|
+| Context window | Context usage % and window size |
+| Rate limits | 5h and 7d limits (%, time until reset) |
+| Tokens in/out | Input and output tokens (cumulative) |
+| Cache write/read | Cache tokens (write, read) |
+| Cost | Session cost in USD |
+| Session time | Active session duration |
+| API response time | API latency |
+| Lines added/removed | Code lines changed |
 
-Данные хранятся **30 дней**. Глобальная статистика (total tokens ever) — навсегда.
+Data is retained for **30 days**. Global statistics (total tokens ever) are kept indefinitely.
 
 ---
 
-## Быстрый старт
+## Quick Start
 
-### 1. Сервер
+### 1. Server
 
 ```bash
-git clone <repo> ~/statusline-metrics
+git clone https://github.com/user/statusline-metrics.git ~/statusline-metrics
 cd ~/statusline-metrics
 pip install -r server/requirements.txt
 python server/metrics_server.py
 ```
 
-Сервер слушает `http://localhost:9177`. Дашборд: `http://localhost:9177/`
+The server listens on `http://localhost:9177`. Dashboard: `http://localhost:9177/`
 
-### 2. Интеграция в statusline.sh
+### 2. Statusline Integration
 
-Добавь блок в **конец** своего `~/.claude/statusline.sh` (после последнего `printf`):
+Append this block to the **end** of your `~/.claude/statusline.sh` (after the last `printf`):
 
 ```bash
-# ── Statusline Metrics: fire-and-forget collection ──
+# -- Statusline Metrics: fire-and-forget collection --
 [[ -z "$session_id" || "$session_id" == "unknown" ]] && { true; } || {
 _m_state="/tmp/.claude_metrics_${session_id}"
 _m_last=0; [[ -f "$_m_state" ]] && _m_last=$(< "$_m_state")
@@ -104,89 +104,89 @@ fi
 }
 ```
 
-Display statusline не меняется. Метрики отправляются фоном раз в ~60 секунд.
+The display portion of your statusline remains untouched. Metrics are sent in the background roughly every 60 seconds.
 
 ---
 
-## Сетевые сценарии
+## Network Scenarios
 
-### A. Один хост (всё локально)
-
-```
-┌──────────────────────────────────┐
-│  Linux / macOS / Windows         │
-│                                  │
-│  statusline.sh                   │
-│       │ curl POST localhost:9177 │
-│       ▼                          │
-│  metrics-server (:9177)          │
-│  SQLite + Dashboard              │
-└──────────────────────────────────┘
-```
-
-Конфигурация не нужна. Работает из коробки.
-
-### B. Два хоста в локальной сети (LAN)
-
-Типичный сценарий: сервер на Linux, клиент на Windows.
+### A. Single Host (everything local)
 
 ```
-  ┌────────────────────────┐        ┌────────────────────────┐
-  │  Windows (.47)         │        │  Linux (.170)          │
-  │  HOME, i9-13900K       │        │  vps170, Ubuntu 24.04  │
-  │                        │        │                        │
-  │  statusline.sh         │        │  statusline.sh         │
-  │       │                │        │       │                │
-  │       │ curl POST ─────┼───────→│       │ curl POST      │
-  │       │ 192.168.31.170 │  LAN   │       ▼ localhost      │
-  │       │ :9177          │        │  metrics-server (:9177)│
-  │       │                │        │  SQLite + Dashboard    │
-  └────────────────────────┘        └────────────────────────┘
-
-  Dashboard: http://192.168.31.170:9177  (доступен с обоих хостов)
++----------------------------------+
+|  Linux / macOS / Windows         |
+|                                  |
+|  statusline.sh                   |
+|       | curl POST localhost:9177 |
+|       v                          |
+|  metrics-server (:9177)          |
+|  SQLite + Dashboard              |
++----------------------------------+
 ```
 
-**Настройка сервера** (на .170):
+No configuration needed. Works out of the box.
+
+### B. Two Hosts on a LAN
+
+A typical setup: the server runs on Linux, the client on Windows.
+
+```
+  +------------------------+        +------------------------+
+  |  Windows (.200)        |        |  Linux (.100)          |
+  |  Desktop               |        |  my-server, Ubuntu     |
+  |                        |        |                        |
+  |  statusline.sh         |        |  statusline.sh         |
+  |       |                |        |       |                |
+  |       | curl POST -----+------->|       | curl POST      |
+  |       | 192.168.1.100  |  LAN   |       v localhost      |
+  |       | :9177          |        |  metrics-server (:9177)|
+  |       |                |        |  SQLite + Dashboard    |
+  +------------------------+        +------------------------+
+
+  Dashboard: http://192.168.1.100:9177  (accessible from both hosts)
+```
+
+**Server setup** (on .100):
 
 ```bash
-# Запустить с привязкой на все интерфейсы (не только localhost)
-# server/config.py или переменная окружения:
+# Start with binding on all interfaces (not just localhost)
+# server/config.py or environment variable:
 export METRICS_HOST=0.0.0.0
 python server/metrics_server.py
 ```
 
-**Настройка клиента** (на .47, Windows):
+**Client setup** (on .200, Windows):
 
-Создай файл `C:/Users/home/.claude/metrics/config`:
+Create the file `C:/Users/YOU/.claude/metrics/config`:
 
 ```bash
-METRICS_SERVER_URL="http://192.168.31.170:9177/api/metrics"
+METRICS_SERVER_URL="http://192.168.1.100:9177/api/metrics"
 ```
 
-Или в Git Bash: `~/.claude/metrics/config` (то же самое).
+Or in Git Bash: `~/.claude/metrics/config` (same thing).
 
-Всё. Windows statusline.sh будет слать метрики на .170.
+That's it. The Windows statusline.sh will now send metrics to .100.
 
-### C. Удалённый сервер (через интернет / VPN)
+### C. Remote Server (over the internet / VPN)
 
 ```
-  ┌───────────────┐       ┌───────────────┐       ┌───────────────┐
-  │  Laptop       │       │  Desktop      │       │  VPS (сервер) │
-  │  macOS        │       │  Windows      │       │  Linux         │
-  │               │       │               │       │                │
-  │  curl POST ───┼──────→│  curl POST ───┼──────→│  metrics-server│
-  │  vpn/tunnel   │  VPN  │  vpn/tunnel   │  VPN  │  :9177         │
-  └───────────────┘       └───────────────┘       └───────────────┘
+  +---------------+       +---------------+       +---------------+
+  |  Laptop       |       |  Desktop      |       |  VPS (server) |
+  |  macOS        |       |  Windows      |       |  Linux         |
+  |               |       |               |       |                |
+  |  curl POST ---+------>|  curl POST ---+------>|  metrics-server|
+  |  vpn/tunnel   |  VPN  |  vpn/tunnel   |  VPN  |  :9177         |
+  +---------------+       +---------------+       +---------------+
 ```
 
-**На клиентах** (`~/.claude/metrics/config`):
+**On each client** (`~/.claude/metrics/config`):
 
 ```bash
 METRICS_SERVER_URL="http://your-vps-ip:9177/api/metrics"
 METRICS_API_KEY="your-secret-key-here"
 ```
 
-**На сервере:** задать API key в конфиге или переменной окружения:
+**On the server:** set the API key via config or environment variable:
 
 ```bash
 export METRICS_API_KEY="your-secret-key-here"
@@ -194,75 +194,75 @@ export METRICS_HOST=0.0.0.0
 python server/metrics_server.py
 ```
 
-Без API key — сервер принимает POST только с localhost.
-С API key — принимает с любого IP при совпадении ключа.
+Without an API key, the server accepts POST requests from localhost only.
+With an API key set, it accepts requests from any IP when the key matches.
 
 ---
 
-## Конфигурация клиента
+## Client Configuration
 
-Файл: `~/.claude/metrics/config`
+File: `~/.claude/metrics/config`
 
-| Переменная | Default | Описание |
-|-----------|---------|----------|
-| `METRICS_SERVER_URL` | `http://localhost:9177/api/metrics` | URL сервера |
-| `METRICS_API_KEY` | _(пусто)_ | API ключ для remote-сервера |
-| `METRICS_ACCOUNT` | `auto` | Имя аккаунта Claude (для multi-account) |
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `METRICS_SERVER_URL` | `http://localhost:9177/api/metrics` | Server URL |
+| `METRICS_API_KEY` | _(empty)_ | API key for remote server auth |
+| `METRICS_ACCOUNT` | `auto` | Claude account name (for multi-account setups) |
 
-Примеры:
+Examples:
 
 ```bash
-# Локальный сервер, один аккаунт (default, можно не создавать файл)
+# Local server, single account (default -- you can skip creating this file)
 METRICS_SERVER_URL="http://localhost:9177/api/metrics"
 
-# Сервер в LAN, аккаунт указан явно
-METRICS_SERVER_URL="http://192.168.31.170:9177/api/metrics"
+# Server on the LAN, account set explicitly
+METRICS_SERVER_URL="http://192.168.1.100:9177/api/metrics"
 METRICS_ACCOUNT="pro-main"
 
-# Второй аккаунт на той же машине (другой config или env)
-METRICS_SERVER_URL="http://192.168.31.170:9177/api/metrics"
+# Second account on the same machine (different config or env)
+METRICS_SERVER_URL="http://192.168.1.100:9177/api/metrics"
 METRICS_ACCOUNT="max-work"
 
-# Сервер через VPN с авторизацией
+# Server over VPN with authentication
 METRICS_SERVER_URL="http://10.8.0.1:9177/api/metrics"
 METRICS_API_KEY="abc123secret"
 METRICS_ACCOUNT="personal"
 ```
 
-### Multi-account
+### Multi-Account
 
-Если на одной машине запущены окна Claude под разными аккаунтами (Pro + Max, личный + рабочий):
+If you run multiple Claude windows under different accounts on the same machine (e.g., Pro + Max, personal + work):
 
-1. **Рекомендуется:** задать `METRICS_ACCOUNT` в config — стабильное, человекочитаемое имя
-2. **Авто-режим:** если не задано, сервер группирует сессии по `rate_limits.resets_at` — сессии с одинаковым временем сброса = один аккаунт
+1. **Recommended:** set `METRICS_ACCOUNT` in your config -- a stable, human-readable name
+2. **Auto mode:** if unset, the server groups sessions by `rate_limits.resets_at` -- sessions sharing the same reset time are treated as one account
 
-Rate limits, prediction и estimation — всё per-account. Данные разных аккаунтов не смешиваются.
+Rate limits, prediction, and estimation are all per-account. Data from different accounts is never mixed.
 
-## Конфигурация сервера
+## Server Configuration
 
-Переменные окружения или `server/config.py`:
+Environment variables or `server/config.py`:
 
-| Переменная | Default | Описание |
-|-----------|---------|----------|
-| `METRICS_HOST` | `127.0.0.1` | Bind address (`0.0.0.0` для LAN) |
-| `METRICS_PORT` | `9177` | Порт |
-| `METRICS_API_KEY` | _(пусто)_ | Если задан — требуется для remote POST |
-| `METRICS_RETENTION_DAYS` | `30` | Хранение данных (дни) |
-| `METRICS_DB_PATH` | `~/.claude/metrics/statusline-metrics.db` | Путь к БД |
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `METRICS_HOST` | `127.0.0.1` | Bind address (`0.0.0.0` for LAN access) |
+| `METRICS_PORT` | `9177` | Port |
+| `METRICS_API_KEY` | _(empty)_ | If set, required for remote POST requests |
+| `METRICS_RETENTION_DAYS` | `30` | Data retention period (days) |
+| `METRICS_DB_PATH` | `~/.claude/metrics/statusline-metrics.db` | Database path |
 
 ---
 
 ## Fallback
 
-Если сервер недоступен, метрики сохраняются локально:
+If the server is unreachable, metrics are saved locally:
 
 ```
 ~/.claude/metrics/pending.jsonl
 ```
 
-При следующем запуске сервера — автоматический инжест из pending.jsonl.
+When the server comes back online, it automatically ingests data from pending.jsonl on startup.
 
-## Автозапуск сервера
+## Autostart
 
 **Linux (systemd user service):**
 
@@ -318,25 +318,25 @@ launchctl load ~/Library/LaunchAgents/com.statusline-metrics.plist
 **Windows (Task Scheduler):**
 
 ```bat
-:: Создать start_metrics.bat
+:: Create start_metrics.bat
 echo start /B pythonw %USERPROFILE%\statusline-metrics\server\metrics_server.py > %USERPROFILE%\start_metrics.bat
 
-:: Добавить в Task Scheduler: Trigger = At Logon, Action = start_metrics.bat
+:: Add to Task Scheduler: Trigger = At Logon, Action = start_metrics.bat
 schtasks /create /tn "StatuslineMetrics" /tr "%USERPROFILE%\start_metrics.bat" /sc onlogon
 ```
 
 ---
 
-## Структура проекта
+## Project Structure
 
 ```
 statusline-metrics/
-├── README.md                  # Этот файл
+├── README.md                  # This file
 ├── server/
 │   ├── metrics_server.py      # Flask app (entry point)
 │   ├── database.py            # SQLite init, queries, cleanup
-│   ├── ingest.py              # Инжест pending.jsonl
-│   ├── config.py              # Конфигурация
+│   ├── ingest.py              # Ingest pending.jsonl
+│   ├── config.py              # Configuration
 │   ├── requirements.txt       # flask, waitress
 │   └── static/                # Dashboard
 │       ├── index.html
@@ -346,31 +346,31 @@ statusline-metrics/
 │       │   ├── app.js
 │       │   ├── charts.js
 │       │   └── api.js
-│       └── vendor/            # Локальные JS-библиотеки
+│       └── vendor/            # Vendored JS libraries
 │           └── chart.js      # Chart.js 4.4.7
-└── install.sh                 # Установка (vendor libs + dirs)
+└── install.sh                 # Setup script (vendor libs + dirs)
 ```
 
 ## Dashboard
 
-Дашборд: `http://<server-ip>:9177/`
+Dashboard: `http://<server-ip>:9177/`
 
-- Dark theme, минималистичный UI
-- Графики в стиле Binance (фильтры: 1h / 6h / 1d / 7d / 30d)
+- Dark theme, minimalist UI
+- Binance-style charts (time filters: 1h / 6h / 1d / 7d / 30d)
 - Per-project breakdown
 - Rate limit prediction
-- Context window analysis (min/max/avg реального окна в токенах)
+- Context window analysis (min/max/avg of actual token window size)
 - Global all-time statistics
 
 ## Smoke Test
 
-После установки сервера и интеграции в statusline.sh — проверь что всё работает:
+After installing the server and integrating the snippet into statusline.sh, verify everything works:
 
 ```bash
-# 1. Сервер жив?
+# 1. Is the server alive?
 curl -s http://localhost:9177/api/health | python3 -m json.tool
 
-# Ожидаемый ответ:
+# Expected response:
 # {
 #     "status": "ok",
 #     "uptime_seconds": 42,
@@ -381,7 +381,7 @@ curl -s http://localhost:9177/api/health | python3 -m json.tool
 #     "version": "1.0.0"
 # }
 
-# 2. Отправить тестовую метрику вручную:
+# 2. Send a test metric manually:
 curl -s -X POST http://localhost:9177/api/metrics \
   -H 'Content-Type: application/json' \
   -d '{
@@ -389,8 +389,8 @@ curl -s -X POST http://localhost:9177/api/metrics \
     "sid": "test-session-001",
     "pid": "a1b2c3d4e5f6",
     "pname": "my-project",
-    "ppath": "/home/user/my-project",
-    "host": "vps170",
+    "ppath": "/home/you/my-project",
+    "host": "my-server",
     "acct": "pro-main",
     "model": "claude-opus-4-6",
     "ctx": 42.50,
@@ -410,12 +410,12 @@ curl -s -X POST http://localhost:9177/api/metrics \
     "lr": 30
   }'
 
-# Ответ: {"status": "ok"}
+# Response: {"status": "ok"}
 
-# 3. Проверить что запись в БД:
+# 3. Verify the record was stored:
 curl -s http://localhost:9177/api/projects | python3 -m json.tool
 
-# Ожидаемый ответ:
+# Expected response:
 # [
 #     {
 #         "project_id": "a1b2c3d4e5f6",
@@ -425,95 +425,95 @@ curl -s http://localhost:9177/api/projects | python3 -m json.tool
 #     }
 # ]
 
-# 4. Открыть дашборд в браузере:
+# 4. Open the dashboard in your browser:
 #    http://localhost:9177/
-#    (или http://192.168.31.170:9177/ с другого хоста в LAN)
+#    (or http://192.168.1.100:9177/ from another host on the LAN)
 ```
 
-Если шаги 1-3 прошли — система работает. Запусти Claude и через минуту реальные метрики появятся на дашборде.
+If steps 1-3 pass, the system is working. Launch Claude and within a minute real metrics will start appearing on the dashboard.
 
-## Auto-setup через Claude
+## Auto-Setup via Claude
 
-Если хочешь, чтобы Claude Code сам настроил систему — скопируй этот блок в чат:
-
-```
-Настрой statusline-metrics на этой машине:
-
-1. Клонируй репозиторий в ~/statusline-metrics (если ещё нет)
-2. Запусти install.sh (установит зависимости и vendor JS)
-3. Запусти сервер: python3 ~/statusline-metrics/server/metrics_server.py
-4. Проверь: curl -s http://localhost:9177/api/health
-5. Добавь metrics-блок в конец моего ~/.claude/statusline.sh
-   (блок из README.md, секция "Интеграция в statusline.sh")
-   ВАЖНО: не меняй существующий код statusline.sh, только добавь блок В КОНЕЦ
-6. Проверь что statusline display не изменился
-7. Настрой автозапуск сервера (systemd на Linux, launchd на macOS)
-
-Сервер должен слушать на 0.0.0.0:9177 (для доступа из LAN).
-Конфиг клиента: ~/.claude/metrics/config
-```
-
-Для настройки на **удалённом хосте** (например Windows-машина шлёт на Linux-сервер):
+If you want Claude Code to set up the system for you, copy this block into the chat:
 
 ```
-На моей Windows-машине настрой statusline-metrics клиент:
+Set up statusline-metrics on this machine:
 
-1. Создай файл ~/.claude/metrics/config с содержимым:
-   METRICS_SERVER_URL="http://192.168.31.170:9177/api/metrics"
-   METRICS_ACCOUNT="home-pc"
+1. Clone the repo to ~/statusline-metrics (if not already present)
+2. Run install.sh (installs dependencies and vendor JS)
+3. Start the server: python3 ~/statusline-metrics/server/metrics_server.py
+4. Verify: curl -s http://localhost:9177/api/health
+5. Append the metrics block to the end of my ~/.claude/statusline.sh
+   (the block from README.md, section "Statusline Integration")
+   IMPORTANT: do not modify the existing statusline.sh code, only append the block at the END
+6. Verify the statusline display is unchanged
+7. Set up server autostart (systemd on Linux, launchd on macOS)
 
-2. Добавь metrics-блок в конец моего ~/.claude/statusline.sh
-   (из README statusline-metrics репозитория)
-   ВАЖНО: блок добавляется ПОСЛЕ последнего printf, ничего не меняя
+The server should listen on 0.0.0.0:9177 (for LAN access).
+Client config: ~/.claude/metrics/config
+```
 
-3. Проверь: curl -s http://192.168.31.170:9177/api/health
+To set up a **remote client** (e.g., a Windows machine sending metrics to a Linux server):
+
+```
+On my Windows machine, set up the statusline-metrics client:
+
+1. Create the file ~/.claude/metrics/config with contents:
+   METRICS_SERVER_URL="http://192.168.1.100:9177/api/metrics"
+   METRICS_ACCOUNT="desktop"
+
+2. Append the metrics block to the end of my ~/.claude/statusline.sh
+   (from the statusline-metrics repo README)
+   IMPORTANT: the block goes AFTER the last printf, changing nothing else
+
+3. Verify: curl -s http://192.168.1.100:9177/api/health
 ```
 
 ## API Reference
 
 ```
-POST /api/metrics                    — приём метрик от клиента
-GET  /api/health                     — статус сервера
-GET  /api/projects                   — список проектов
-GET  /api/projects/:id/summary       — сводка по проекту
-GET  /api/projects/summary-all       — агрегированная сводка по всем проектам
-GET  /api/metrics                    — time-series (project_id, from, to, interval)
-GET  /api/rate-limits/current        — текущие 5h/7d лимиты
-GET  /api/rate-limits/history        — история rate limits
-GET  /api/rate-limits/prediction     — прогноз исчерпания
-GET  /api/rate-limits/estimates      — оценка token budget
-GET  /api/context-window/analysis    — анализ контекстного окна
-GET  /api/global-stats               — all-time статистика
-GET  /api/sessions                   — список сессий
-GET  /api/response-time              — время ответа API
+POST /api/metrics                    -- ingest metrics from a client
+GET  /api/health                     -- server status
+GET  /api/projects                   -- list of projects
+GET  /api/projects/:id/summary       -- per-project summary
+GET  /api/projects/summary-all       -- aggregated summary across all projects
+GET  /api/metrics                    -- time-series (project_id, from, to, interval)
+GET  /api/rate-limits/current        -- current 5h/7d limits
+GET  /api/rate-limits/history        -- rate limit history
+GET  /api/rate-limits/prediction     -- exhaustion forecast
+GET  /api/rate-limits/estimates      -- token budget estimate
+GET  /api/context-window/analysis    -- context window analysis
+GET  /api/global-stats               -- all-time statistics
+GET  /api/sessions                   -- list of sessions
+GET  /api/response-time              -- API response time
 ```
 
-Все GET-endpoints поддерживают `?account=X` для multi-account фильтрации.
+All GET endpoints support `?account=X` for multi-account filtering.
 
 ## Troubleshooting
 
-**Сервер не запускается:**
-- Порт 9177 занят? `ss -tlnp | grep 9177`
+**Server won't start:**
+- Port 9177 already in use? `ss -tlnp | grep 9177`
 - Python < 3.9? `python3 --version`
-- Зависимости не установлены? `pip install -r server/requirements.txt`
+- Missing dependencies? `pip install -r server/requirements.txt`
 
-**Метрики не поступают:**
-- Сервер доступен? `curl http://localhost:9177/api/health`
-- statusline.sh обновлён? Проверь блок метрик в конце файла
-- Fallback работает? `ls ~/.claude/metrics/pending.jsonl`
+**Metrics not arriving:**
+- Is the server reachable? `curl http://localhost:9177/api/health`
+- Is statusline.sh updated? Check for the metrics block at the end of the file
+- Is fallback working? `ls ~/.claude/metrics/pending.jsonl`
 
-**Дашборд пустой:**
-- Выбран правильный time range? Попробуй 30d
-- Проект выбран? Кликни "All Projects"
-- Есть записи? Проверь `curl -s http://localhost:9177/api/health | python3 -m json.tool` -- поле `total_records`
+**Dashboard is empty:**
+- Correct time range selected? Try 30d
+- Is a project selected? Click "All Projects"
+- Any records? Check `curl -s http://localhost:9177/api/health | python3 -m json.tool` -- look at the `total_records` field
 
 **Rate limit exceeded (429):**
-- Сервер ограничивает 120 записей/минуту на сессию
-- Нормальная отправка — раз в 60 секунд, лимит не затрагивается
-- Если срабатывает — проверь что statusline.sh не запущен в цикле
+- The server enforces 120 records/minute per session
+- Normal cadence is one submission every 60 seconds, well within the limit
+- If you're hitting this, make sure statusline.sh isn't running in a tight loop
 
-## Требования
+## Requirements
 
 - Python 3.9+
-- bash 4+ (Linux/macOS) или Git Bash 5+ (Windows)
-- curl, jq (уже используются statusline.sh)
+- bash 4+ (Linux/macOS) or Git Bash 5+ (Windows)
+- curl, jq (already required by statusline.sh)

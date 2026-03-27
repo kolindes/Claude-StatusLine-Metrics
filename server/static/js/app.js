@@ -137,8 +137,8 @@ function clearChildren(el) {
 }
 
 function createEmptyRow(colSpan, message) {
-  var tr = document.createElement('tr');
-  var td = document.createElement('td');
+  const tr = document.createElement('tr');
+  const td = document.createElement('td');
   td.colSpan = colSpan;
   td.style.cssText = 'text-align:center;color:var(--text-muted);padding:24px';
   td.textContent = message;
@@ -411,7 +411,7 @@ async function loadOverview() {
     allSummaries = [projectSummary];
   } else if (state.projects.length > 0) {
     // All Projects: single aggregated summary query for KPIs
-    var summaryResult = await API.allProjectsSummary({ from: tr.from, to: tr.to }).catch(function() { return null; });
+    const summaryResult = await API.allProjectsSummary({ from: tr.from, to: tr.to }).catch(function() { return null; });
     projectSummary = summaryResult || {
       tokens_in: 0, tokens_out: 0, cache_write: 0, cache_read: 0,
       total_tokens: 0, cost_usd: 0, duration_ms: 0, sessions: 0, avg_ctx_pct: 0,
@@ -981,7 +981,7 @@ function renderContextSessions(sessions) {
       tdTrend.style.color = 'var(--red)';
     } else if (ctxPct >= 40) {
       tdTrend.textContent = '→ moderate';
-      tdTrend.style.color = 'var(--cyan)';
+      tdTrend.style.color = 'var(--primary)';
     } else {
       tdTrend.textContent = '→ low';
       tdTrend.style.color = 'var(--green)';
@@ -1132,7 +1132,7 @@ async function loadGlobalStats() {
   clearChildren(tbody);
 
   // Use stats.projects if available, otherwise fall back to live project data
-  const projects = stats.projects || [];
+  let projects = stats.projects || [];
   if (projects.length === 0 && state.projects && state.projects.length > 0) {
     // Build from live sessions data + per-project summaries (parallel)
     const summaries = await Promise.all(

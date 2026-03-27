@@ -55,7 +55,7 @@
         <span class="last-update"></span>
         <svg class="refresh-ring" viewBox="0 0 20 20">
           <circle cx="10" cy="10" r="8" fill="none" stroke="var(--border)" stroke-width="1"/>
-          <circle cx="10" cy="10" r="8" fill="none" stroke="var(--cyan)" stroke-width="1.5"
+          <circle cx="10" cy="10" r="8" fill="none" stroke="var(--primary)" stroke-width="1.5"
             stroke-dasharray="50.27" stroke-dashoffset="50.27" class="refresh-progress"/>
         </svg>
       </div>
@@ -157,7 +157,7 @@
             <div class="kpi-label" style="font-size:0.8rem;margin-bottom:12px">5-HOUR LIMIT</div>
             <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:12px">
               <div class="kpi-value" id="rl-5h-value" style="font-size:2.2rem;margin:0">0%</div>
-              <div id="rl-5h-tokens" style="font-size:0.85rem;color:var(--cyan);font-family:var(--font-mono)"></div>
+              <div id="rl-5h-tokens" style="font-size:0.85rem;color:var(--primary);font-family:var(--font-mono)"></div>
             </div>
             <div class="progress-bar" style="height:10px;margin-bottom:10px">
               <div class="progress-fill" id="rl-5h-fill" style="width:0%"></div>
@@ -171,7 +171,7 @@
             <div class="kpi-label" style="font-size:0.8rem;margin-bottom:12px">7-DAY LIMIT</div>
             <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:12px">
               <div class="kpi-value" id="rl-7d-value" style="font-size:2.2rem;margin:0">0%</div>
-              <div id="rl-7d-tokens" style="font-size:0.85rem;color:var(--cyan);font-family:var(--font-mono)"></div>
+              <div id="rl-7d-tokens" style="font-size:0.85rem;color:var(--primary);font-family:var(--font-mono)"></div>
             </div>
             <div class="progress-bar" style="height:10px;margin-bottom:10px">
               <div class="progress-fill" id="rl-7d-fill" style="width:0%"></div>
@@ -339,7 +339,7 @@
   <!-- ═══ Scripts ═══════════════════════════════════════════════ -->
   <!-- Chart.js: try local vendor first, CDN fallback -->
   <script src="/static/vendor/chart.js"
-          onerror="var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js';document.head.appendChild(s);">
+          onerror="let s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js';document.head.appendChild(s);">
   </script>
   <script src="/static/js/api.js"></script>
   <script src="/static/js/charts.js"></script>

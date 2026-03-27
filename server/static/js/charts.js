@@ -1,6 +1,6 @@
 /* ================================================================
    Statusline Metrics -- Chart.js Helpers
-   Sci-Fi Command Center: cyan/magenta lines, holographic fills,
+   Sci-Fi Command Center: primary/secondary lines, holographic fills,
    grid overlays, glow effects.
    ================================================================ */
 
@@ -8,15 +8,13 @@
 
 /* ── Colour Constants (Rebel Alliance Palette) ──────────────── */
 
-// NOTE: Color names are historical (from original Imperial theme).
-// "cyan" = Rebel orange (#ff8c00), "magenta" = Rebel green (#4ade80).
 const C = {
   tokenIn:      '#ff8c00',
   tokenOut:     '#4ade80',
   cacheWrite:   '#ffaa33',
   cacheRead:    '#60a5fa',
-  cyan:         '#ff8c00',
-  magenta:      '#4ade80',
+  primary:      '#ff8c00',
+  secondary:    '#4ade80',
   green:        '#4ade80',
   amber:        '#ffaa33',
   red:          '#ef6461',
@@ -310,28 +308,28 @@ function createRateLimitsChart(canvasId) {
         {
           label: '5-Hour Limit',
           data: [],
-          borderColor: C.cyan,
-          backgroundColor: C.cyan,
+          borderColor: C.primary,
+          backgroundColor: C.primary,
           borderWidth: 2,
           fill: false,
           tension: 0.3,
           pointRadius: 0,
           pointHoverRadius: 5,
-          pointHoverBackgroundColor: C.cyan,
+          pointHoverBackgroundColor: C.primary,
           pointHoverBorderColor: '#fff',
           pointHoverBorderWidth: 1,
         },
         {
           label: '7-Day Limit',
           data: [],
-          borderColor: C.magenta,
-          backgroundColor: C.magenta,
+          borderColor: C.secondary,
+          backgroundColor: C.secondary,
           borderWidth: 2,
           fill: false,
           tension: 0.3,
           pointRadius: 0,
           pointHoverRadius: 5,
-          pointHoverBackgroundColor: C.magenta,
+          pointHoverBackgroundColor: C.secondary,
           pointHoverBorderColor: '#fff',
           pointHoverBorderWidth: 1,
         },

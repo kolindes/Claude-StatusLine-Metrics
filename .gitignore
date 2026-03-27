@@ -35,6 +35,9 @@ Thumbs.db
 *.jpg
 ctx-test-*.md
 
+# Vendor JS (downloaded by install.sh)
+server/static/vendor/
+
 # Logs
 *.log
 /tmp/
