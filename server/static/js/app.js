@@ -633,6 +633,15 @@ function updateProjectsBarChart(summaries, projectsList) {
   chart.update();
 }
 
+function getSessionMetrics(s) {
+  const hasPeriod = s.period_tokens_in != null;
+  return {
+    tokens: hasPeriod ? ((s.period_tokens_in || 0) + (s.period_tokens_out || 0)) : ((s.max_tokens_in || 0) + (s.max_tokens_out || 0)),
+    cost: hasPeriod ? (s.period_cost_usd || 0) : (s.max_cost_usd || 0),
+    duration: hasPeriod ? Math.round((s.period_duration_ms || 0) / 1000) : (s.duration_seconds || 0),
+  };
+}
+
 function renderSessionsTable(sessions) {
   const tbody = $('#sessions-tbody');
   if (!tbody) return;
@@ -655,11 +664,10 @@ function renderSessionsTable(sessions) {
     }
     const g = grouped[name];
     g.sessions++;
-    // Use period deltas if available, otherwise fall back to lifetime max
-    const hasPeriod = s.period_tokens_in != null;
-    g.duration += hasPeriod ? Math.round((s.period_duration_ms || 0) / 1000) : (s.duration_seconds || 0);
-    g.tokens += hasPeriod ? ((s.period_tokens_in || 0) + (s.period_tokens_out || 0)) : ((s.max_tokens_in || 0) + (s.max_tokens_out || 0));
-    g.cost += hasPeriod ? (s.period_cost_usd || 0) : (s.max_cost_usd || 0);
+    const m = getSessionMetrics(s);
+    g.duration += m.duration;
+    g.tokens += m.tokens;
+    g.cost += m.cost;
     if (s.last_seen_at > g.last_seen_at) { g.last_seen_at = s.last_seen_at; g.model = s.model; }
     const seenDiff = s.last_seen_at ? (nowTs - s.last_seen_at) : Infinity;
     if (seenDiff < 300) g.has_active = true;
@@ -703,13 +711,13 @@ function renderSessionsTable(sessions) {
     tbody.appendChild(tr);
   });
 
-  // Total row (use same period/lifetime logic as grouped rows)
+  // Total row
   let totalTokens = 0, totalCost = 0, totalDur = 0;
   sessions.forEach(function(s) {
-    const hasPeriod = s.period_tokens_in != null;
-    totalTokens += hasPeriod ? ((s.period_tokens_in || 0) + (s.period_tokens_out || 0)) : ((s.max_tokens_in || 0) + (s.max_tokens_out || 0));
-    totalCost += hasPeriod ? (s.period_cost_usd || 0) : (s.max_cost_usd || 0);
-    totalDur += hasPeriod ? Math.round((s.period_duration_ms || 0) / 1000) : (s.duration_seconds || 0);
+    const m = getSessionMetrics(s);
+    totalTokens += m.tokens;
+    totalCost += m.cost;
+    totalDur += m.duration;
   });
   const tfoot = document.createElement('tr');
   tfoot.className = 'sessions-total';

@@ -1021,18 +1021,31 @@ def get_sessions(
     where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
     params.append(limit)
 
-    # Period-based delta subqueries (if from_ts/to_ts provided)
+    # Period-based deltas via LEFT JOIN (parameterized, single scan)
+    period_join = ""
     period_cols = ""
+    period_params: list[Any] = []
     if from_ts is not None and to_ts is not None:
-        period_cols = f""",
-            (SELECT MAX(m.tokens_in) - MIN(m.tokens_in) FROM metrics m
-             WHERE m.session_id = s.session_id AND m.ts >= {int(from_ts)} AND m.ts <= {int(to_ts)}) AS period_tokens_in,
-            (SELECT MAX(m.tokens_out) - MIN(m.tokens_out) FROM metrics m
-             WHERE m.session_id = s.session_id AND m.ts >= {int(from_ts)} AND m.ts <= {int(to_ts)}) AS period_tokens_out,
-            (SELECT MAX(m.cost_usd) - MIN(m.cost_usd) FROM metrics m
-             WHERE m.session_id = s.session_id AND m.ts >= {int(from_ts)} AND m.ts <= {int(to_ts)}) AS period_cost_usd,
-            (SELECT MAX(m.duration_ms) - MIN(m.duration_ms) FROM metrics m
-             WHERE m.session_id = s.session_id AND m.ts >= {int(from_ts)} AND m.ts <= {int(to_ts)}) AS period_duration_ms"""
+        period_join = """
+            LEFT JOIN (
+                SELECT session_id,
+                       MAX(tokens_in) - MIN(tokens_in) AS period_tokens_in,
+                       MAX(tokens_out) - MIN(tokens_out) AS period_tokens_out,
+                       MAX(cost_usd) - MIN(cost_usd) AS period_cost_usd,
+                       MAX(duration_ms) - MIN(duration_ms) AS period_duration_ms
+                FROM metrics
+                WHERE ts >= ? AND ts <= ?
+                GROUP BY session_id
+            ) p ON p.session_id = s.session_id"""
+        period_cols = """,
+            p.period_tokens_in,
+            p.period_tokens_out,
+            p.period_cost_usd,
+            p.period_duration_ms"""
+        period_params = [from_ts, to_ts]
+
+    # Build final params: period_params first (for JOIN), then filter params, then LIMIT
+    final_params = period_params + params
 
     sql = f"""
         SELECT
@@ -1058,11 +1071,12 @@ def get_sessions(
              ORDER BY m.ts DESC LIMIT 1) AS last_ctx_pct
             {period_cols}
         FROM sessions s
+        {period_join}
         {where}
         ORDER BY s.last_seen_at DESC
         LIMIT ?
     """
-    rows = conn.execute(sql, params).fetchall()
+    rows = conn.execute(sql, final_params).fetchall()
     return _rows_to_list(rows)
 
 
