@@ -1047,10 +1047,10 @@ function renderContextSessions(sessions) {
     if (ctxPct <= 0) {
       tdTrend.textContent = '--';
       tdTrend.style.color = 'var(--text-muted)';
-    } else if (ctxPct >= 70) {
+    } else if (ctxPct >= 80) {
       tdTrend.textContent = '↑ filling';
       tdTrend.style.color = 'var(--red)';
-    } else if (ctxPct >= 40) {
+    } else if (ctxPct >= 50) {
       tdTrend.textContent = '→ moderate';
       tdTrend.style.color = 'var(--primary)';
     } else {
