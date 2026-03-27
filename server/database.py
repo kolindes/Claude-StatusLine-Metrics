@@ -963,6 +963,9 @@ def get_global_stats(
         "total_lines_added": hist.get("hist_lines_added", 0) + live.get("live_lines_added", 0),
         "total_lines_removed": hist.get("hist_lines_removed", 0) + live.get("live_lines_removed", 0),
         "first_seen": first_seen,
+        "last_seen": conn.execute(
+            "SELECT MAX(last_seen_at) AS ls FROM sessions"
+        ).fetchone()["ls"] or 0,
         "projects": projects,
     }
 

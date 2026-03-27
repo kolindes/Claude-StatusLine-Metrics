@@ -36,6 +36,7 @@ const TIME_RANGES = {
 /* ── Count Formatter (stars, etc.) ────────────────────────────── */
 
 function fmtCount(n) {
+  if (n >= 1000000000) return (n / 1000000000).toFixed(1) + 'B';
   if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
   if (n >= 1000) return (n / 1000).toFixed(1) + 'k';
   return String(n);
@@ -46,6 +47,7 @@ function fmtCount(n) {
 function fmtTokens(n) {
   if (n == null || isNaN(n) || n <= 0) return '0';
   n = Math.round(n);
+  if (n >= 1_000_000_000) return (n / 1_000_000_000).toFixed(2) + 'B';
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
   if (n >= 100) return (n / 1_000).toFixed(1) + 'k';
   return '<0.1k';
@@ -276,9 +278,9 @@ function navigateTo(page) {
   // 3.7: Page subtitle
   updateSubtitle();
 
-  // Show time filter on all pages
+  // Hide time filter on Global Stats (lifetime data, not time-filtered)
   const filterBar = $('.time-filter-bar');
-  if (filterBar) filterBar.style.display = '';
+  if (filterBar) filterBar.style.display = (page === 'global') ? 'none' : '';
 
   // Load page data
   refreshData();
@@ -1126,14 +1128,10 @@ async function loadGlobalStats() {
   if (elFirst) elFirst.className = 'stat-value accent-green';
   setText('#gs-first-seen', fmtDateTime(stats.first_seen));
 
-  // Last Active: max last_seen_at from current sessions
-  let lastSeen = 0;
-  if (state.projects && state.projects.length > 0) {
-    state.projects.forEach(function(p) { if (p.last_active > lastSeen) lastSeen = p.last_active; });
-  }
+  // Last Active: from API response
   const elLast = $('#gs-last-seen');
   if (elLast) elLast.className = 'stat-value accent-blue';
-  setText('#gs-last-seen', lastSeen > 0 ? fmtTimeAgo(lastSeen) : '--');
+  setText('#gs-last-seen', stats.last_seen ? fmtTimeAgo(stats.last_seen) : '--');
 
   // Per-project table
   const tbody = $('#global-projects-tbody');
