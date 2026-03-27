@@ -1042,14 +1042,9 @@ function renderContextSessions(sessions) {
     // Trend column: compare last_ctx_pct vs max_ctx_pct
     const tdTrend = document.createElement('td');
     tdTrend.style.cssText = 'font-size:0.75rem;font-family:var(--font-mono);white-space:nowrap';
-    const maxPct = s.max_ctx_pct || 0;
     if (ctxPct <= 0) {
       tdTrend.textContent = '--';
       tdTrend.style.color = 'var(--text-muted)';
-    } else if (ctxPct < maxPct - 15) {
-      // ctx dropped significantly from max → compression happened
-      tdTrend.textContent = '↓ compressed';
-      tdTrend.style.color = 'var(--yellow)';
     } else if (ctxPct >= 70) {
       tdTrend.textContent = '↑ filling';
       tdTrend.style.color = 'var(--red)';
