@@ -45,6 +45,7 @@ from server.database import (  # noqa: E402
     get_db_size,
     get_global_stats,
     get_metrics_timeseries,
+    get_metrics_timeseries_all,
     get_projects,
     get_project_summary,
     get_rate_estimates,
@@ -81,6 +82,24 @@ _START_TIME: float = time.time()
 
 # Required fields for POST /api/metrics
 _REQUIRED_FIELDS: list[str] = ["ts", "sid", "pid", "pname", "ppath", "host", "model"]
+
+# ── Rate limiting ────────────────────────────────────────────────
+
+_rate_limit_store: dict[str, tuple[int, float]] = {}  # session_id -> (count, window_start)
+RATE_LIMIT_MAX = 120  # max 120 writes per minute per session
+
+
+def _check_rate_limit(session_id: str) -> bool:
+    """Return True if the request is within rate limits, False otherwise."""
+    now = time.time()
+    entry = _rate_limit_store.get(session_id)
+    if entry is None or now - entry[1] > 60:
+        _rate_limit_store[session_id] = (1, now)
+        return True
+    if entry[0] >= RATE_LIMIT_MAX:
+        return False
+    _rate_limit_store[session_id] = (entry[0] + 1, entry[1])
+    return True
 
 # ── Per-request database connection ──────────────────────────────────
 
@@ -184,6 +203,11 @@ def _handle_receive_metric() -> tuple[Response, int]:
     if not isinstance(ts, (int, float)) or ts <= 0:
         return jsonify({"error": "ts must be a positive number"}), 400
 
+    # Rate limiting per session
+    session_id = data.get("sid", "")
+    if not _check_rate_limit(session_id):
+        return jsonify({"error": "rate limit exceeded (120 writes/min)"}), 429
+
     try:
         db = get_db()
         insert_metric(db, data)
@@ -228,8 +252,6 @@ def api_project_summary(project_id: str) -> tuple[Response, int]:
 def _handle_metrics_timeseries() -> tuple[Response, int]:
     """Time-series metrics aggregated by interval."""
     project_id = request.args.get("project_id")
-    if not project_id:
-        return jsonify({"error": "project_id is required"}), 400
 
     interval_str = request.args.get("interval", "1m")
     interval_seconds = INTERVAL_MAP.get(interval_str)
@@ -240,9 +262,15 @@ def _handle_metrics_timeseries() -> tuple[Response, int]:
     from_ts, to_ts = _parse_ts_range()
     account = request.args.get("account")
     db = get_db()
-    data = get_metrics_timeseries(
-        db, project_id, from_ts, to_ts, interval_seconds, account=account
-    )
+
+    if project_id:
+        data = get_metrics_timeseries(
+            db, project_id, from_ts, to_ts, interval_seconds, account=account
+        )
+    else:
+        data = get_metrics_timeseries_all(
+            db, from_ts, to_ts, interval_seconds, account=account
+        )
     return jsonify(data), 200
 
 

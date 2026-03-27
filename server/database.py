@@ -671,6 +671,42 @@ def get_metrics_timeseries(
     return _rows_to_list(rows)
 
 
+def get_metrics_timeseries_all(
+    conn: sqlite3.Connection,
+    from_ts: int,
+    to_ts: int,
+    interval_seconds: int,
+    *,
+    account: str | None = None,
+) -> list[dict[str, Any]]:
+    """Aggregate timeseries across ALL projects (not per-project)."""
+    acct_clause, acct_params = _account_filter(account)
+    bucket = f"(ts / {int(interval_seconds)}) * {int(interval_seconds)}"
+    params: list[Any] = [from_ts, to_ts] + acct_params
+    sql = f"""
+        SELECT
+            {bucket} AS bucket_ts,
+            AVG(ctx_pct) AS ctx_pct,
+            AVG(rate_5h_pct) AS rate_5h_pct,
+            AVG(rate_7d_pct) AS rate_7d_pct,
+            MAX(tokens_in) AS tokens_in,
+            MAX(tokens_out) AS tokens_out,
+            MAX(cache_write) AS cache_write,
+            MAX(cache_read) AS cache_read,
+            MAX(cost_usd) AS cost_usd,
+            MAX(duration_ms) AS duration_ms,
+            MAX(api_duration_ms) AS api_duration_ms,
+            MAX(lines_added) AS lines_added,
+            MAX(lines_removed) AS lines_removed,
+            COUNT(*) AS samples
+        FROM metrics
+        WHERE ts >= ? AND ts <= ? {acct_clause}
+        GROUP BY {bucket}
+        ORDER BY bucket_ts ASC
+    """
+    return _rows_to_list(conn.execute(sql, params).fetchall())
+
+
 def get_rate_limits_current(
     conn: sqlite3.Connection, *, account: str | None = None
 ) -> dict[str, Any]:
@@ -1046,30 +1082,33 @@ def compute_rate_estimates(conn: sqlite3.Connection) -> int:
         """
         rows = conn.execute(sql, (cutoff,)).fetchall()
 
-        for row in rows:
-            # Avoid duplicates: skip if we already have an estimate with
-            # the same ts + session_id + window_type
-            existing = conn.execute(
-                "SELECT 1 FROM rate_estimates "
-                "WHERE ts = ? AND session_id = ? AND window_type = ?",
-                (row["ts"], row["session_id"], window_type),
-            ).fetchone()
-            if existing:
-                continue
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            for row in rows:
+                # Avoid duplicates: skip if we already have an estimate with
+                # the same ts + session_id + window_type
+                existing = conn.execute(
+                    "SELECT 1 FROM rate_estimates "
+                    "WHERE ts = ? AND session_id = ? AND window_type = ?",
+                    (row["ts"], row["session_id"], window_type),
+                ).fetchone()
+                if existing:
+                    continue
 
-            conn.execute(
-                """
-                INSERT INTO rate_estimates
-                    (ts, session_id, window_type, delta_pct, delta_tokens, estimated_total)
-                VALUES (?, ?, ?, ?, ?, ?)
-                """,
-                (row["ts"], row["session_id"], window_type,
-                 row["delta_pct"], row["delta_tokens"], row["estimated_total"]),
-            )
-            inserted += 1
-
-    if inserted > 0:
-        conn.commit()
+                conn.execute(
+                    """
+                    INSERT INTO rate_estimates
+                        (ts, session_id, window_type, delta_pct, delta_tokens, estimated_total)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (row["ts"], row["session_id"], window_type,
+                     row["delta_pct"], row["delta_tokens"], row["estimated_total"]),
+                )
+                inserted += 1
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
 
     # Update global_stats with averaged estimates
     for window_type, est_col, samples_col in [

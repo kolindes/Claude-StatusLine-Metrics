@@ -489,6 +489,28 @@ GET  /api/response-time              — время ответа API
 
 Все GET-endpoints поддерживают `?account=X` для multi-account фильтрации.
 
+## Troubleshooting
+
+**Сервер не запускается:**
+- Порт 9177 занят? `ss -tlnp | grep 9177`
+- Python < 3.9? `python3 --version`
+- Зависимости не установлены? `pip install -r server/requirements.txt`
+
+**Метрики не поступают:**
+- Сервер доступен? `curl http://localhost:9177/api/health`
+- statusline.sh обновлён? Проверь блок метрик в конце файла
+- Fallback работает? `ls ~/.claude/metrics/pending.jsonl`
+
+**Дашборд пустой:**
+- Выбран правильный time range? Попробуй 30d
+- Проект выбран? Кликни "All Projects"
+- Есть записи? Проверь `curl -s http://localhost:9177/api/health | python3 -m json.tool` -- поле `total_records`
+
+**Rate limit exceeded (429):**
+- Сервер ограничивает 120 записей/минуту на сессию
+- Нормальная отправка — раз в 60 секунд, лимит не затрагивается
+- Если срабатывает — проверь что statusline.sh не запущен в цикле
+
 ## Требования
 
 - Python 3.9+

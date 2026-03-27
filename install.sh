@@ -88,12 +88,44 @@ else
   ok "chart.js (уже есть)"
 fi
 
-# ── 4. Директории ──
+# ── 4. Проверка порта ──
+echo ""
+if ss -tlnp 2>/dev/null | grep -q ':9177 '; then
+  warn "Порт 9177 уже занят. Остановите процесс или измените METRICS_PORT."
+fi
+
+# ── 5. Директории ──
 echo ""
 mkdir -p "$METRICS_DIR"
 ok "Директория метрик: $METRICS_DIR"
 
-# ── 5. Итог ──
+# ── 6. Автозапуск (systemd) ──
+echo ""
+read -p "  Настроить автозапуск (systemd)? [y/N] " -n 1 -r
+echo
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+  mkdir -p ~/.config/systemd/user
+  cat > ~/.config/systemd/user/statusline-metrics.service << SEOF
+[Unit]
+Description=Statusline Metrics Server
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=$(command -v python3) $SCRIPT_DIR/server/metrics_server.py
+Restart=always
+RestartSec=5
+Environment=METRICS_HOST=0.0.0.0
+
+[Install]
+WantedBy=default.target
+SEOF
+  systemctl --user daemon-reload
+  systemctl --user enable --now statusline-metrics
+  ok "systemd service установлен и запущен"
+fi
+
+# ── 7. Итог ──
 echo ""
 echo "  ────────────────────────────"
 echo "  Установка завершена."

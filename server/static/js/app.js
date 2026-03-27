@@ -46,34 +46,22 @@ function fmtPct(n) {
   return n.toFixed(1) + '%';
 }
 
-function fmtDuration(ms) {
-  if (!ms || ms <= 0) return '0m';
-  const totalSec = Math.floor(ms / 1000);
-  const h = Math.floor(totalSec / 3600);
-  const m = Math.floor((totalSec % 3600) / 60);
-  if (h > 0) return h + 'h ' + m + 'm';
-  if (m > 0) return m + 'm';
-  return totalSec + 's';
-}
-
-function fmtMin(minutes) {
-  if (minutes == null || minutes <= 0) return '0m';
-  minutes = Math.round(minutes);
-  var d = Math.floor(minutes / 1440);
-  var h = Math.floor((minutes % 1440) / 60);
-  var m = minutes % 60;
+function fmtDur(value, unit) {
+  // unit: 'ms' (default), 's', 'm'
+  if (value == null || value <= 0) return '0m';
+  let sec;
+  if (unit === 'm') sec = Math.round(value) * 60;
+  else if (unit === 's') sec = Math.round(value);
+  else sec = Math.floor(value / 1000);
+  if (sec <= 0) return '0m';
+  const d = Math.floor(sec / 86400);
+  const h = Math.floor((sec % 86400) / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
   if (d > 0) return d + 'd ' + h + 'h';
   if (h > 0) return h + 'h ' + m + 'm';
-  return m + 'm';
-}
-
-function fmtDurationSec(sec) {
-  if (!sec || sec <= 0) return '0m';
-  const h = Math.floor(sec / 3600);
-  const m = Math.floor((sec % 3600) / 60);
-  if (h > 0) return h + 'h ' + m + 'm';
   if (m > 0) return m + 'm';
-  return sec + 's';
+  return s + 's';
 }
 
 function fmtCost(usd) {
@@ -140,7 +128,7 @@ function esc(str) {
 function $(sel) { return document.querySelector(sel); }
 function $$(sel) { return document.querySelectorAll(sel); }
 function setText(sel, text) {
-  var el = typeof sel === 'string' ? $(sel) : sel;
+  const el = typeof sel === 'string' ? $(sel) : sel;
   if (el) el.textContent = text;
 }
 
@@ -149,12 +137,12 @@ function setText(sel, text) {
 function animateValue(el, from, to, duration) {
   if (!el || from === to) return;
   duration = duration || 600;
-  var start = performance.now();
-  var fmt = el.dataset.format || 'tokens';
+  const start = performance.now();
+  const fmt = el.dataset.format || 'tokens';
   function step(now) {
-    var progress = Math.min((now - start) / duration, 1);
-    var ease = 1 - Math.pow(1 - progress, 3); // easeOutCubic
-    var current = from + (to - from) * ease;
+    const progress = Math.min((now - start) / duration, 1);
+    const ease = 1 - Math.pow(1 - progress, 3); // easeOutCubic
+    const current = from + (to - from) * ease;
     if (fmt === 'pct') el.textContent = fmtPct(current);
     else if (fmt === 'int') el.textContent = String(Math.round(current));
     else el.textContent = fmtTokens(current);
@@ -164,15 +152,15 @@ function animateValue(el, from, to, duration) {
 }
 
 function setKpiValue(sel, rawValue, formatType) {
-  var el = typeof sel === 'string' ? $(sel) : sel;
+  const el = typeof sel === 'string' ? $(sel) : sel;
   if (!el) return;
-  var oldRaw = parseFloat(el.dataset.rawValue) || 0;
+  const oldRaw = parseFloat(el.dataset.rawValue) || 0;
   el.dataset.rawValue = String(rawValue);
   el.dataset.format = formatType || 'tokens';
   if (oldRaw !== rawValue) {
     animateValue(el, oldRaw, rawValue, 600);
     /* Sci-fi data-flicker on parent card */
-    var card = el.closest('.kpi-card') || el.closest('.stat-card');
+    const card = el.closest('.kpi-card') || el.closest('.stat-card');
     if (card) {
       card.classList.remove('data-update');
       void card.offsetWidth; /* force reflow */
@@ -191,7 +179,7 @@ function fmtDelta(n) {
 }
 
 function updateKpiTrend(trendId, key, currentValue) {
-  var el = document.getElementById(trendId);
+  const el = document.getElementById(trendId);
   if (!el) return;
   if (!(key in state.prevKpi)) {
     // First render -- store value but do not show badge
@@ -200,16 +188,16 @@ function updateKpiTrend(trendId, key, currentValue) {
     el.textContent = '';
     return;
   }
-  var prev = state.prevKpi[key];
-  var delta = currentValue - prev;
+  const prev = state.prevKpi[key];
+  const delta = currentValue - prev;
   state.prevKpi[key] = currentValue;
   if (delta === 0) {
     el.className = 'kpi-trend neutral';
     el.textContent = '';
     return;
   }
-  var sign = delta > 0 ? '+' : '';
-  var arrow = delta > 0 ? '\u2191' : '\u2193';
+  const sign = delta > 0 ? '+' : '';
+  const arrow = delta > 0 ? '\u2191' : '\u2193';
   el.className = 'kpi-trend ' + (delta > 0 ? 'up' : 'down');
   el.textContent = arrow + ' ' + sign + fmtDelta(Math.abs(delta));
 }
@@ -253,7 +241,7 @@ function navigateTo(page) {
   });
 
   // Update page title
-  var titles = {
+  const titles = {
     overview: 'Overview',
     ratelimits: 'Rate Limits',
     context: 'Context Window',
@@ -265,7 +253,7 @@ function navigateTo(page) {
   updateSubtitle();
 
   // Show time filter on all pages
-  var filterBar = $('.time-filter-bar');
+  const filterBar = $('.time-filter-bar');
   if (filterBar) filterBar.style.display = '';
 
   // Load page data
@@ -273,7 +261,7 @@ function navigateTo(page) {
 }
 
 function updateSubtitle() {
-  var subtitles = {
+  const subtitles = {
     overview: 'Real-time token usage and session activity',
     ratelimits: state.currentProject ? 'Account-wide data (project filter not applicable)' : 'API rate limit consumption and predictions',
     context: 'Context window utilization across sessions',
@@ -287,8 +275,8 @@ function selectProject(projectId) {
 
   // Update sidebar active
   $$('.sidebar-projects a').forEach(function(a) {
-    var isAll = a.dataset.pid === '';
-    var isMatch = projectId === null ? isAll : a.dataset.pid === projectId;
+    const isAll = a.dataset.pid === '';
+    const isMatch = projectId === null ? isAll : a.dataset.pid === projectId;
     a.classList.toggle('active', isMatch);
     if (isAll) {
       a.style.fontWeight = projectId === null ? '600' : '';
@@ -305,7 +293,7 @@ function selectProject(projectId) {
 
 async function loadProjects() {
   try {
-    var projects = await API.projects();
+    const projects = await API.projects();
     state.projects = projects;
     renderProjectList(projects);
   } catch (e) {
@@ -315,14 +303,14 @@ async function loadProjects() {
 }
 
 function renderProjectList(projects) {
-  var container = $('#project-list');
+  const container = $('#project-list');
   if (!container) return;
 
   // Clear existing children
   while (container.firstChild) container.removeChild(container.firstChild);
 
   // "All Projects" item always first
-  var allLink = document.createElement('a');
+  const allLink = document.createElement('a');
   allLink.dataset.pid = '';
   if (state.currentProject === null) {
     allLink.className = 'active';
@@ -339,10 +327,10 @@ function renderProjectList(projects) {
   container.appendChild(allLink);
 
   if (!projects || projects.length === 0) {
-    var empty = document.createElement('div');
+    const empty = document.createElement('div');
     empty.className = 'empty-state';
     empty.style.padding = '16px';
-    var desc = document.createElement('div');
+    const desc = document.createElement('div');
     desc.className = 'empty-desc';
     desc.textContent = 'No projects yet';
     empty.appendChild(desc);
@@ -353,18 +341,18 @@ function renderProjectList(projects) {
   projects.sort(function(a, b) { return (a.project_name || '').localeCompare(b.project_name || ''); });
 
   projects.forEach(function(p) {
-    var a = document.createElement('a');
+    const a = document.createElement('a');
     a.dataset.pid = p.project_id;
     a.title = p.project_name || '';
     if (p.project_id === state.currentProject) a.className = 'active';
     a.textContent = truncate(p.project_name, 20) + ' ';
-    var span = document.createElement('span');
+    const span = document.createElement('span');
     span.className = 'project-sessions';
     span.textContent = plural(p.sessions_count || 0, 'sess', 'sess');
     a.appendChild(span);
     a.addEventListener('click', function(e) {
       e.preventDefault();
-      var pid = p.project_id;
+      const pid = p.project_id;
       selectProject(pid === state.currentProject ? null : pid);
     });
     container.appendChild(a);
@@ -374,33 +362,33 @@ function renderProjectList(projects) {
 /* ── Overview Page ────────────────────────────────────────────── */
 
 async function loadOverview() {
-  var tr = getTimeRange();
+  const tr = getTimeRange();
 
   // Build sessions query with optional project filter (C2) + time range
-  var sessionsParams = { limit: 20, from: tr.from, to: tr.to };
+  const sessionsParams = { limit: 20, from: tr.from, to: tr.to };
   if (state.currentProject !== null) {
     sessionsParams.project_id = state.currentProject;
   }
 
   // Load multiple endpoints in parallel
-  var results = await Promise.all([
+  const results = await Promise.all([
     API.rateLimitsCurrent().catch(function() { return null; }),
     API.sessions(sessionsParams).catch(function() { return []; }),
     API.health().catch(function() { return null; }),
   ]);
-  var rateLimits = results[0];
-  var sessions = results[1];
-  var health = results[2];
+  const rateLimits = results[0];
+  const sessions = results[1];
+  const health = results[2];
 
   // If a project is selected, load project-specific data
-  var projectSummary = null;
-  var timeseries = [];
-  var allSummaries = [];
-  var pid = state.currentProject || (state.projects.length > 0 ? state.projects[0].project_id : null);
+  let projectSummary = null;
+  let timeseries = [];
+  let allSummaries = [];
+  const pid = state.currentProject || (state.projects.length > 0 ? state.projects[0].project_id : null);
 
   if (state.currentProject !== null && pid) {
     // Single project selected
-    var pResults = await Promise.all([
+    const pResults = await Promise.all([
       API.projectSummary(pid, { from: tr.from, to: tr.to }).catch(function() { return null; }),
       API.metrics({ project_id: pid, from: tr.from, to: tr.to, interval: getInterval() }).catch(function() { return []; }),
     ]);
@@ -418,7 +406,7 @@ async function loadOverview() {
       tokens_in: 0, tokens_out: 0, cache_write: 0, cache_read: 0,
       total_tokens: 0, cost_usd: 0, duration_ms: 0, sessions: 0, avg_ctx_pct: 0,
     };
-    var ctxCount = 0;
+    let ctxCount = 0;
     allSummaries.forEach(function(s) {
       if (!s) return;
       projectSummary.tokens_in += s.tokens_in || 0;
@@ -433,9 +421,8 @@ async function loadOverview() {
     });
     if (ctxCount > 0) projectSummary.avg_ctx_pct /= ctxCount;
 
-    // Timeseries: use first project as representative for chart
+    // Timeseries: aggregate across all projects (no project_id)
     timeseries = await API.metrics({
-      project_id: state.projects[0].project_id,
       from: tr.from, to: tr.to, interval: getInterval(),
     }).catch(function() { return []; });
   }
@@ -447,7 +434,7 @@ async function loadOverview() {
 
   // Charts
   updateTokensTimeline(timeseries);
-  var barProjects = state.currentProject !== null
+  const barProjects = state.currentProject !== null
     ? [{ project_name: (state.projects.find(function(p) { return p.project_id === state.currentProject; }) || {}).project_name || state.currentProject }]
     : state.projects;
   updateProjectsBarChart(allSummaries, barProjects);
@@ -463,9 +450,9 @@ async function loadOverview() {
 
 function updateKpiCards(summary, rateLimits, health) {
   if (summary) {
-    var totalTokens = (summary.tokens_in || 0) + (summary.tokens_out || 0);
-    var totalCache = (summary.cache_write || 0) + (summary.cache_read || 0);
-    var cacheHit = totalCache > 0
+    const totalTokens = (summary.tokens_in || 0) + (summary.tokens_out || 0);
+    const totalCache = (summary.cache_write || 0) + (summary.cache_read || 0);
+    const cacheHit = totalCache > 0
       ? ((summary.cache_read || 0) / totalCache * 100).toFixed(0)
       : 0;
 
@@ -477,40 +464,40 @@ function updateKpiCards(summary, rateLimits, health) {
   }
 
   if (rateLimits) {
-    var r5 = rateLimits.five_hour || {};
-    var r7 = rateLimits.seven_day || {};
-    var pct5 = r5.pct || 0;
-    var pct7 = r7.pct || 0;
+    const r5 = rateLimits.five_hour || {};
+    const r7 = rateLimits.seven_day || {};
+    const pct5 = r5.pct || 0;
+    const pct7 = r7.pct || 0;
 
     setKpiValue('#kpi-rate5h-value', pct5, 'pct');
-    var el5 = $('#kpi-rate5h-value');
+    const el5 = $('#kpi-rate5h-value');
     if (el5) el5.className = 'kpi-value ' + (pct5 > 70 ? 'accent-red' : pct5 > 30 ? 'accent-yellow' : 'accent-green');
     setText('#kpi-rate5h-detail', 'resets in ' + fmtTimeUntil(r5.resets_at));
 
     setKpiValue('#kpi-rate7d-value', pct7, 'pct');
-    var el7 = $('#kpi-rate7d-value');
+    const el7 = $('#kpi-rate7d-value');
     if (el7) el7.className = 'kpi-value ' + (pct7 > 70 ? 'accent-red' : pct7 > 30 ? 'accent-yellow' : 'accent-green');
     setText('#kpi-rate7d-detail', 'resets in ' + fmtTimeUntil(r7.resets_at));
   }
 
   if (summary) {
-    var ctxPct = summary.avg_ctx_pct || 0;
+    const ctxPct = summary.avg_ctx_pct || 0;
     setKpiValue('#kpi-context-value', ctxPct, 'pct');
-    var elCtx = $('#kpi-context-value');
+    const elCtx = $('#kpi-context-value');
     if (elCtx) elCtx.className = 'kpi-value ' + (ctxPct > 80 ? 'accent-red' : ctxPct > 50 ? 'accent-yellow' : 'accent-green');
-    var sessCount = summary.sessions || 0;
+    const sessCount = summary.sessions || 0;
     setText('#kpi-context-detail', plural(sessCount, 'session tracked', 'sessions tracked'));
   }
 
   if (health) {
     setKpiValue('#kpi-active-value', health.active_sessions || 0, 'int');
-    var elActive = $('#kpi-active-value');
+    const elActive = $('#kpi-active-value');
     if (elActive) elActive.className = 'kpi-value accent-purple';
-    var recCount = health.total_records || 0;
+    const recCount = health.total_records || 0;
     setText('#kpi-active-detail', plural(recCount, 'total record', 'total records'));
 
     // P3: Live pulse indicator
-    var pulseLive = $('#pulse-live');
+    const pulseLive = $('#pulse-live');
     if (pulseLive) {
       pulseLive.classList.toggle('visible', (health.active_sessions || 0) > 0);
     }
@@ -518,8 +505,8 @@ function updateKpiCards(summary, rateLimits, health) {
 
   // 3.1: KPI Trend badges
   if (summary) {
-    var totalTokensTrend = (summary.tokens_in || 0) + (summary.tokens_out || 0);
-    var totalCacheTrend = (summary.cache_write || 0) + (summary.cache_read || 0);
+    const totalTokensTrend = (summary.tokens_in || 0) + (summary.tokens_out || 0);
+    const totalCacheTrend = (summary.cache_write || 0) + (summary.cache_read || 0);
     updateKpiTrend('kpi-tokens-trend', 'tokens', totalTokensTrend);
     updateKpiTrend('kpi-cache-trend', 'cache', totalCacheTrend);
     updateKpiTrend('kpi-context-trend', 'context', summary.avg_ctx_pct || 0);
@@ -534,13 +521,13 @@ function updateKpiCards(summary, rateLimits, health) {
 }
 
 function showError(containerId, msg) {
-  var container = document.getElementById(containerId);
+  const container = document.getElementById(containerId);
   if (!container) return;
   while (container.firstChild) container.removeChild(container.firstChild);
-  var div = document.createElement('div');
+  const div = document.createElement('div');
   div.className = 'error-state';
   div.textContent = 'Failed to load data. ';
-  var retry = document.createElement('span');
+  const retry = document.createElement('span');
   retry.className = 'retry-link';
   retry.textContent = 'Retry';
   retry.addEventListener('click', function() {
@@ -552,26 +539,26 @@ function showError(containerId, msg) {
 }
 
 function setChartEmpty(canvasId, empty) {
-  var container = document.getElementById(canvasId);
+  const container = document.getElementById(canvasId);
   if (!container) return;
   container = container.closest('.chart-container');
   if (!container) return;
-  var msg = container.querySelector('.chart-empty');
+  const msg = container.querySelector('.chart-empty');
   if (empty && !msg) {
-    var el = document.createElement('div');
+    const el = document.createElement('div');
     el.className = 'chart-empty';
     // C3: contextual empty message
-    var hasFilter = state.currentProject !== null || state.timeRange !== '1d';
+    const hasFilter = state.currentProject !== null || state.timeRange !== '1d';
     el.textContent = hasFilter ? 'No data for this time range' : 'Collecting data\u2026';
     container.appendChild(el);
   } else if (empty && msg) {
     // Update text if already exists (range/filter may have changed)
-    var hasFilter2 = state.currentProject !== null || state.timeRange !== '1d';
+    const hasFilter2 = state.currentProject !== null || state.timeRange !== '1d';
     msg.textContent = hasFilter2 ? 'No data for this time range' : 'Collecting data\u2026';
   } else if (!empty && msg) {
     msg.remove();
   }
-  var canvas = container.querySelector('canvas');
+  const canvas = container.querySelector('canvas');
   if (canvas) canvas.style.opacity = empty ? '0.15' : '1';
 }
 
@@ -579,15 +566,15 @@ function updateTokensTimeline(timeseries) {
   if (!state.charts.tokens) {
     state.charts.tokens = createTokensChart('chart-tokens');
   }
-  var empty = !timeseries || timeseries.length === 0;
+  const empty = !timeseries || timeseries.length === 0;
   setChartEmpty('chart-tokens', empty);
   if (empty) {
     updateChart(state.charts.tokens, [], [[], []]);
     return;
   }
-  var labels = timeseries.map(function(r) { return fmtTimeLabel(r.bucket_ts); });
-  var tokensIn = timeseries.map(function(r) { return r.tokens_in || 0; });
-  var tokensOut = timeseries.map(function(r) { return r.tokens_out || 0; });
+  const labels = timeseries.map(function(r) { return fmtTimeLabel(r.bucket_ts); });
+  const tokensIn = timeseries.map(function(r) { return r.tokens_in || 0; });
+  const tokensOut = timeseries.map(function(r) { return r.tokens_out || 0; });
   updateChart(state.charts.tokens, labels, [tokensIn, tokensOut]);
 }
 
@@ -595,10 +582,10 @@ function updateProjectsBarChart(summaries, projectsList) {
   if (!state.charts.breakdown) {
     state.charts.breakdown = createProjectsBarChart('chart-breakdown');
   }
-  var chart = state.charts.breakdown;
+  const chart = state.charts.breakdown;
   if (!chart) return;
 
-  var projects = projectsList || state.projects || [];
+  const projects = projectsList || state.projects || [];
   if (projects.length === 0) {
     chart.data.labels = [];
     chart.data.datasets[0].data = [];
@@ -607,11 +594,11 @@ function updateProjectsBarChart(summaries, projectsList) {
     return;
   }
 
-  var labels = [];
-  var data = [];
+  const labels = [];
+  const data = [];
   projects.forEach(function(p, i) {
-    var s = summaries ? summaries[i] : null;
-    var tokens = s ? ((s.tokens_in || 0) + (s.tokens_out || 0)) : 0;
+    const s = summaries ? summaries[i] : null;
+    const tokens = s ? ((s.tokens_in || 0) + (s.tokens_out || 0)) : 0;
     if (tokens > 0) {
       labels.push(truncate(p.project_name, 18));
       data.push(tokens);
@@ -619,12 +606,12 @@ function updateProjectsBarChart(summaries, projectsList) {
   });
 
   // Sort by tokens descending
-  var indices = data.map(function(_, i) { return i; });
+  const indices = data.map(function(_, i) { return i; });
   indices.sort(function(a, b) { return data[b] - data[a]; });
-  var sortedLabels = indices.map(function(i) { return labels[i]; });
-  var sortedData = indices.map(function(i) { return data[i]; });
+  const sortedLabels = indices.map(function(i) { return labels[i]; });
+  const sortedData = indices.map(function(i) { return data[i]; });
 
-  var empty = sortedData.length === 0;
+  const empty = sortedData.length === 0;
   setChartEmpty('chart-breakdown', empty);
 
   chart.data.labels = sortedLabels;
@@ -633,15 +620,15 @@ function updateProjectsBarChart(summaries, projectsList) {
 }
 
 function renderSessionsTable(sessions) {
-  var tbody = $('#sessions-tbody');
+  const tbody = $('#sessions-tbody');
   if (!tbody) return;
 
   // Clear existing rows
   while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
 
   if (!sessions || sessions.length === 0) {
-    var tr = document.createElement('tr');
-    var td = document.createElement('td');
+    const tr = document.createElement('tr');
+    const td = document.createElement('td');
     td.colSpan = 5;
     td.style.textAlign = 'center';
     td.style.color = 'var(--text-muted)';
@@ -652,33 +639,33 @@ function renderSessionsTable(sessions) {
     return;
   }
 
-  var nowTs = Math.floor(Date.now() / 1000);
+  const nowTs = Math.floor(Date.now() / 1000);
   sessions.forEach(function(s) {
-    var tr = document.createElement('tr');
+    const tr = document.createElement('tr');
 
-    var tdProj = document.createElement('td');
-    var dot = document.createElement('span');
-    var seenDiff = s.last_seen_at ? (nowTs - s.last_seen_at) : Infinity;
+    const tdProj = document.createElement('td');
+    const dot = document.createElement('span');
+    const seenDiff = s.last_seen_at ? (nowTs - s.last_seen_at) : Infinity;
     dot.className = 'status-dot ' + (seenDiff < 300 ? 'active' : 'idle');
     tdProj.appendChild(dot);
     tdProj.appendChild(document.createTextNode(truncate(s.project_name, 20)));
     tr.appendChild(tdProj);
 
-    var tdModel = document.createElement('td');
+    const tdModel = document.createElement('td');
     tdModel.textContent = s.model || '--';
     tr.appendChild(tdModel);
 
-    var tdDur = document.createElement('td');
+    const tdDur = document.createElement('td');
     tdDur.className = 'cell-right';
-    tdDur.textContent = fmtDurationSec(s.duration_seconds);
+    tdDur.textContent = fmtDur(s.duration_seconds, 's');
     tr.appendChild(tdDur);
 
-    var tdTok = document.createElement('td');
+    const tdTok = document.createElement('td');
     tdTok.className = 'cell-right';
     tdTok.textContent = fmtTokens((s.max_tokens_in || 0) + (s.max_tokens_out || 0));
     tr.appendChild(tdTok);
 
-    var tdCost = document.createElement('td');
+    const tdCost = document.createElement('td');
     tdCost.className = 'cell-right';
     tdCost.textContent = fmtCost(s.max_cost_usd);
     tr.appendChild(tdCost);
@@ -687,27 +674,27 @@ function renderSessionsTable(sessions) {
   });
 
   // Total row
-  var totalTokens = 0, totalCost = 0, totalDur = 0;
+  let totalTokens = 0, totalCost = 0, totalDur = 0;
   sessions.forEach(function(s) {
     totalTokens += (s.max_tokens_in || 0) + (s.max_tokens_out || 0);
     totalCost += s.max_cost_usd || 0;
     totalDur += s.duration_seconds || 0;
   });
-  var tfoot = document.createElement('tr');
+  const tfoot = document.createElement('tr');
   tfoot.className = 'sessions-total';
-  var tfLabel = document.createElement('td');
+  const tfLabel = document.createElement('td');
   tfLabel.colSpan = 2;
   tfLabel.textContent = 'TOTAL (' + plural(sessions.length, 'session', 'sessions') + ')';
   tfoot.appendChild(tfLabel);
-  var tfDur = document.createElement('td');
+  const tfDur = document.createElement('td');
   tfDur.className = 'cell-right';
-  tfDur.textContent = fmtDurationSec(totalDur);
+  tfDur.textContent = fmtDur(totalDur, 's');
   tfoot.appendChild(tfDur);
-  var tfTok = document.createElement('td');
+  const tfTok = document.createElement('td');
   tfTok.className = 'cell-right';
   tfTok.textContent = fmtTokens(totalTokens);
   tfoot.appendChild(tfTok);
-  var tfCost = document.createElement('td');
+  const tfCost = document.createElement('td');
   tfCost.className = 'cell-right';
   tfCost.textContent = fmtCost(totalCost);
   tfoot.appendChild(tfCost);
@@ -717,23 +704,23 @@ function renderSessionsTable(sessions) {
 /* ── Rate Limits Page ─────────────────────────────────────────── */
 
 async function loadRateLimits() {
-  var tr = getTimeRange();
+  const tr = getTimeRange();
 
-  var results = await Promise.all([
+  const results = await Promise.all([
     API.rateLimitsCurrent().catch(function() { return null; }),
     API.rateLimitsHistory({ from: tr.from, to: tr.to }).catch(function() { return []; }),
   ]);
-  var current = results[0];
-  var history = results[1];
+  const current = results[0];
+  const history = results[1];
 
   // Current status
   if (current) {
-    var r5 = current.five_hour || {};
-    var r7 = current.seven_day || {};
+    const r5 = current.five_hour || {};
+    const r7 = current.seven_day || {};
 
     // 5-hour
     setText('#rl-5h-value', fmtPct(r5.pct || 0));
-    var fill5 = $('#rl-5h-fill');
+    const fill5 = $('#rl-5h-fill');
     if (fill5) {
       fill5.style.width = Math.min(r5.pct || 0, 100).toFixed(1) + '%';
       fill5.className = 'progress-fill' + (r5.pct > 80 ? ' danger' : r5.pct > 50 ? ' warn' : '');
@@ -742,7 +729,7 @@ async function loadRateLimits() {
 
     // 7-day
     setText('#rl-7d-value', fmtPct(r7.pct || 0));
-    var fill7 = $('#rl-7d-fill');
+    const fill7 = $('#rl-7d-fill');
     if (fill7) {
       fill7.style.width = Math.min(r7.pct || 0, 100).toFixed(1) + '%';
       fill7.className = 'progress-fill' + (r7.pct > 80 ? ' danger' : r7.pct > 50 ? ' warn' : '');
@@ -755,32 +742,32 @@ async function loadRateLimits() {
   }
 
   // Token budget estimates & exhaustion prediction
-  var estResults = await Promise.all([
+  const estResults = await Promise.all([
     API.rateLimitsEstimates({ window: '5h' }).catch(function() { return null; }),
     API.rateLimitsEstimates({ window: '7d' }).catch(function() { return null; }),
     API.rateLimitsPrediction().catch(function() { return null; }),
   ]);
-  var estimates5h = estResults[0];
-  var estimates7d = estResults[1];
-  var prediction = estResults[2];
+  const estimates5h = estResults[0];
+  const estimates7d = estResults[1];
+  const prediction = estResults[2];
 
-  var section = document.getElementById('rl-estimates-section');
+  const section = document.getElementById('rl-estimates-section');
   if (section) {
-    var hasData = (estimates5h && estimates5h.samples > 0) ||
+    const hasData = (estimates5h && estimates5h.samples > 0) ||
                   (estimates7d && estimates7d.samples > 0) ||
                   prediction;
     section.style.display = hasData ? '' : 'none';
 
     // Show token usage estimation
     if (estimates5h && estimates5h.avg > 0) {
-      var used5h = Math.round((state._rl5hPct || 0) * estimates5h.avg / 100);
-      var rem5h = Math.round(estimates5h.avg - used5h);
+      const used5h = Math.round((state._rl5hPct || 0) * estimates5h.avg / 100);
+      const rem5h = Math.round(estimates5h.avg - used5h);
       setText('#rl-5h-tokens', '~' + fmtTokens(used5h) + ' of ~' + fmtTokens(estimates5h.avg));
       setText('#rl-5h-remaining', '~' + fmtTokens(rem5h) + ' remaining');
     }
     if (estimates7d && estimates7d.avg > 0) {
-      var used7d = Math.round((state._rl7dPct || 0) * estimates7d.avg / 100);
-      var rem7d = Math.round(estimates7d.avg - used7d);
+      const used7d = Math.round((state._rl7dPct || 0) * estimates7d.avg / 100);
+      const rem7d = Math.round(estimates7d.avg - used7d);
       setText('#rl-7d-tokens', '~' + fmtTokens(used7d) + ' of ~' + fmtTokens(estimates7d.avg));
       setText('#rl-7d-remaining', '~' + fmtTokens(rem7d) + ' remaining');
     }
@@ -798,10 +785,10 @@ async function loadRateLimits() {
     }
 
     if (prediction) {
-      var p5 = prediction.five_hour || {};
-      var p7 = prediction.seven_day || {};
-      var pred5text = p5.minutes_to_100 != null ? fmtMin(p5.minutes_to_100) : 'Not growing';
-      var pred7text = p7.minutes_to_100 != null ? fmtMin(p7.minutes_to_100) : 'Not growing';
+      const p5 = prediction.five_hour || {};
+      const p7 = prediction.seven_day || {};
+      const pred5text = p5.minutes_to_100 != null ? fmtDur(p5.minutes_to_100, 'm') : 'Not growing';
+      const pred7text = p7.minutes_to_100 != null ? fmtDur(p7.minutes_to_100, 'm') : 'Not growing';
       setText('#rl-pred-5h', pred5text);
       setText('#rl-pred-5h-rate', p5.rate_per_min != null ? p5.rate_per_min.toFixed(3) + '%/min' : 'Rate limit stable');
       setText('#rl-pred-7d', pred7text);
@@ -813,12 +800,12 @@ async function loadRateLimits() {
   if (!state.charts.rateLimits) {
     state.charts.rateLimits = createRateLimitsChart('chart-ratelimits');
   }
-  var rlEmpty = !history || history.length === 0;
+  const rlEmpty = !history || history.length === 0;
   setChartEmpty('chart-ratelimits', rlEmpty);
   if (history && history.length > 0) {
-    var labels = history.map(function(r) { return fmtTimeLabel(r.ts); });
-    var h5 = history.map(function(r) { return r.rate_5h_pct || 0; });
-    var h7 = history.map(function(r) { return r.rate_7d_pct || 0; });
+    const labels = history.map(function(r) { return fmtTimeLabel(r.ts); });
+    const h5 = history.map(function(r) { return r.rate_5h_pct || 0; });
+    const h7 = history.map(function(r) { return r.rate_7d_pct || 0; });
     updateChart(state.charts.rateLimits, labels, [h5, h7]);
   } else {
     updateChart(state.charts.rateLimits, [], [[], []]);
@@ -840,28 +827,28 @@ function ctxAccentClass(pct) {
 }
 
 async function loadContext() {
-  var periodMap = { '1h': '1h', '6h': '6h', '1d': '1d', '7d': '7d', '30d': '30d' };
-  var period = periodMap[state.timeRange] || '7d';
-  var tr = getTimeRange();
+  const periodMap = { '1h': '1h', '6h': '6h', '1d': '1d', '7d': '7d', '30d': '30d' };
+  const period = periodMap[state.timeRange] || '7d';
+  const tr = getTimeRange();
 
-  var contextParams = { period: period };
+  const contextParams = { period: period };
   if (state.currentProject) contextParams.project_id = state.currentProject;
-  var sessParams = { limit: 30, from: tr.from, to: tr.to };
+  const sessParams = { limit: 30, from: tr.from, to: tr.to };
   if (state.currentProject) sessParams.project_id = state.currentProject;
 
-  var results = await Promise.all([
+  const results = await Promise.all([
     API.contextAnalysis(contextParams).catch(function() { return null; }),
     API.sessions(sessParams).catch(function() { return []; }),
   ]);
-  var analysis = results[0];
-  var sessions = results[1];
+  const analysis = results[0];
+  const sessions = results[1];
 
   // (chart removed — table with progress bars is more informative)
 
   // KPI: Compressions
-  var compCount = (analysis && analysis.compressions_count) || 0;
+  const compCount = (analysis && analysis.compressions_count) || 0;
   setText('#ctx-compressions', String(compCount));
-  var compDetail = $('#ctx-compressions-detail');
+  const compDetail = $('#ctx-compressions-detail');
   if (compDetail) {
     compDetail.textContent = compCount === 0
       ? 'No compressions detected'
@@ -869,21 +856,21 @@ async function loadContext() {
   }
 
   // KPI: Avg Context Usage (computed from current sessions with ctx data)
-  var sessionsWithCtx = (sessions || []).filter(function(s) {
+  const sessionsWithCtx = (sessions || []).filter(function(s) {
     return s.last_ctx_pct != null && s.last_ctx_pct > 0;
   });
-  var avgPct = 0;
+  let avgPct = 0;
   if (sessionsWithCtx.length > 0) {
-    var sum = 0;
+    let sum = 0;
     sessionsWithCtx.forEach(function(s) { sum += s.last_ctx_pct; });
     avgPct = sum / sessionsWithCtx.length;
   } else if (analysis && analysis.avg_pct) {
     avgPct = analysis.avg_pct;
   }
   setText('#ctx-avg-pct', fmtPct(avgPct));
-  var avgEl = $('#ctx-avg-pct');
+  const avgEl = $('#ctx-avg-pct');
   if (avgEl) avgEl.className = 'kpi-value ' + ctxAccentClass(avgPct);
-  var avgDetail = $('#ctx-avg-detail');
+  const avgDetail = $('#ctx-avg-detail');
   if (avgDetail) {
     avgDetail.textContent = sessionsWithCtx.length > 0
       ? 'across ' + sessionsWithCtx.length + ' active session' + (sessionsWithCtx.length > 1 ? 's' : '')
@@ -895,14 +882,14 @@ async function loadContext() {
 }
 
 function renderContextSessions(sessions) {
-  var tbody = $('#ctx-sessions-tbody');
+  const tbody = $('#ctx-sessions-tbody');
   if (!tbody) return;
 
   while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
 
   if (!sessions || sessions.length === 0) {
-    var row = document.createElement('tr');
-    var td = document.createElement('td');
+    const row = document.createElement('tr');
+    const td = document.createElement('td');
     td.colSpan = 10;
     td.style.textAlign = 'center';
     td.style.color = 'var(--text-muted)';
@@ -917,36 +904,36 @@ function renderContextSessions(sessions) {
   sessions.sort(function(a, b) { return (b.last_ctx_pct || 0) - (a.last_ctx_pct || 0); });
 
   sessions.forEach(function(s) {
-    var ctxPct = s.last_ctx_pct || 0;
-    var ctxSize = s.last_ctx_size || 0;
-    var remaining = ctxSize > 0 ? Math.round(ctxSize * (100 - ctxPct) / 100) : 0;
-    var usedTokens = ctxSize > 0 ? Math.round(ctxSize * ctxPct / 100) : 0;
-    var color = ctxColor(ctxPct);
-    var isActive = s.last_seen_at && (Math.floor(Date.now() / 1000) - s.last_seen_at < 600);
+    const ctxPct = s.last_ctx_pct || 0;
+    const ctxSize = s.last_ctx_size || 0;
+    const remaining = ctxSize > 0 ? Math.round(ctxSize * (100 - ctxPct) / 100) : 0;
+    const usedTokens = ctxSize > 0 ? Math.round(ctxSize * ctxPct / 100) : 0;
+    const color = ctxColor(ctxPct);
+    const isActive = s.last_seen_at && (Math.floor(Date.now() / 1000) - s.last_seen_at < 600);
 
-    var tr = document.createElement('tr');
+    const tr = document.createElement('tr');
 
     // Project column: status dot + name
-    var tdProj = document.createElement('td');
-    var dotSpan = document.createElement('span');
+    const tdProj = document.createElement('td');
+    const dotSpan = document.createElement('span');
     dotSpan.style.cssText = 'display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:6px;vertical-align:middle;background:' + (isActive ? 'var(--green, #4ade80)' : 'var(--text-muted, #666)');
     tdProj.appendChild(dotSpan);
-    var nameSpan = document.createElement('span');
+    const nameSpan = document.createElement('span');
     nameSpan.textContent = truncate(s.project_name, 20);
     nameSpan.title = s.project_name || '';
     tdProj.appendChild(nameSpan);
     tr.appendChild(tdProj);
 
     // Model column
-    var tdModel = document.createElement('td');
+    const tdModel = document.createElement('td');
     tdModel.style.cssText = 'font-size:0.7rem;color:var(--text-secondary)';
-    var modelName = s.model || '--';
+    const modelName = s.model || '--';
     // Shorten model name: "Opus 4.6 (1M context)" → "Opus 4.6"
     tdModel.textContent = modelName.replace(/\s*\(.*\)/, '');
     tr.appendChild(tdModel);
 
     // Window column
-    var tdWin = document.createElement('td');
+    const tdWin = document.createElement('td');
     tdWin.className = 'cell-mono';
     if (ctxSize > 0) {
       tdWin.textContent = fmtTokens(ctxSize);
@@ -957,30 +944,30 @@ function renderContextSessions(sessions) {
     tr.appendChild(tdWin);
 
     // Used column: percentage + inline progress bar + used/total
-    var tdUsed = document.createElement('td');
+    const tdUsed = document.createElement('td');
     if (ctxSize > 0) {
-      var wrapper = document.createElement('div');
+      const wrapper = document.createElement('div');
       wrapper.style.cssText = 'display:flex;align-items:center;gap:8px;min-width:220px';
 
-      var pctSpan = document.createElement('span');
+      const pctSpan = document.createElement('span');
       pctSpan.style.cssText = 'color:' + color + ';min-width:42px;font-family:var(--font-mono);font-size:0.75rem';
       pctSpan.textContent = fmtPct(ctxPct);
       wrapper.appendChild(pctSpan);
 
-      var barOuter = document.createElement('div');
+      const barOuter = document.createElement('div');
       barOuter.style.cssText = 'flex:1;height:4px;background:var(--border, #1e293b);border-radius:2px;overflow:hidden;min-width:60px';
-      var barInner = document.createElement('div');
+      const barInner = document.createElement('div');
       barInner.style.cssText = 'width:' + Math.min(ctxPct, 100) + '%;height:100%;background:' + color + ';border-radius:2px;transition:width 0.5s ease';
       barOuter.appendChild(barInner);
       wrapper.appendChild(barOuter);
 
-      var detailSpan = document.createElement('span');
+      const detailSpan = document.createElement('span');
       detailSpan.style.cssText = 'color:var(--text-muted);font-size:0.65rem;font-family:var(--font-mono);white-space:nowrap';
       detailSpan.textContent = '(' + fmtTokens(usedTokens) + ' / ' + fmtTokens(ctxSize) + ')';
       wrapper.appendChild(detailSpan);
 
       if (ctxPct >= 80) {
-        var warn = document.createElement('span');
+        const warn = document.createElement('span');
         warn.style.cssText = 'font-size:0.6rem;color:var(--red, #ef6461);font-weight:600;white-space:nowrap';
         warn.textContent = 'HIGH';
         wrapper.appendChild(warn);
@@ -993,9 +980,9 @@ function renderContextSessions(sessions) {
     tr.appendChild(tdUsed);
 
     // Trend column: compare last_ctx_pct vs max_ctx_pct
-    var tdTrend = document.createElement('td');
+    const tdTrend = document.createElement('td');
     tdTrend.style.cssText = 'font-size:0.75rem;font-family:var(--font-mono);white-space:nowrap';
-    var maxPct = s.max_ctx_pct || 0;
+    const maxPct = s.max_ctx_pct || 0;
     if (ctxPct <= 0) {
       tdTrend.textContent = '--';
       tdTrend.style.color = 'var(--text-muted)';
@@ -1016,7 +1003,7 @@ function renderContextSessions(sessions) {
     tr.appendChild(tdTrend);
 
     // Remaining column
-    var tdRem = document.createElement('td');
+    const tdRem = document.createElement('td');
     tdRem.className = 'cell-right cell-mono';
     if (ctxSize > 0) {
       tdRem.textContent = fmtTokens(remaining);
@@ -1028,25 +1015,25 @@ function renderContextSessions(sessions) {
     tr.appendChild(tdRem);
 
     // Tokens column (total in+out for session)
-    var tdTok = document.createElement('td');
+    const tdTok = document.createElement('td');
     tdTok.className = 'cell-right cell-mono';
     tdTok.textContent = fmtTokens((s.max_tokens_in || 0) + (s.max_tokens_out || 0));
     tr.appendChild(tdTok);
 
     // Cost column
-    var tdCost = document.createElement('td');
+    const tdCost = document.createElement('td');
     tdCost.className = 'cell-right cell-mono';
     tdCost.textContent = fmtCost(s.max_cost_usd);
     tr.appendChild(tdCost);
 
     // Duration column
-    var tdDur = document.createElement('td');
+    const tdDur = document.createElement('td');
     tdDur.className = 'cell-right cell-mono';
-    tdDur.textContent = fmtDurationSec(s.duration_seconds);
+    tdDur.textContent = fmtDur(s.duration_seconds, 's');
     tr.appendChild(tdDur);
 
     // Last Seen column
-    var tdSeen = document.createElement('td');
+    const tdSeen = document.createElement('td');
     tdSeen.className = 'cell-right';
     tdSeen.textContent = fmtTimeAgo(s.last_seen_at);
     tr.appendChild(tdSeen);
@@ -1055,48 +1042,48 @@ function renderContextSessions(sessions) {
   });
 
   // Total row
-  var totalTokens = 0, totalCost = 0, totalDur = 0, totalRemaining = 0;
+  let totalTokens = 0, totalCost = 0, totalDur = 0, totalRemaining = 0;
   sessions.forEach(function(s) {
     totalTokens += (s.max_tokens_in || 0) + (s.max_tokens_out || 0);
     totalCost += s.max_cost_usd || 0;
     totalDur += s.duration_seconds || 0;
-    var sz = s.last_ctx_size || 0;
-    var pct = s.last_ctx_pct || 0;
+    const sz = s.last_ctx_size || 0;
+    const pct = s.last_ctx_pct || 0;
     totalRemaining += sz > 0 ? Math.round(sz * (100 - pct) / 100) : 0;
   });
-  var tfoot = document.createElement('tr');
+  const tfoot = document.createElement('tr');
   tfoot.className = 'sessions-total';
   // Project
-  var tfLabel = document.createElement('td');
+  const tfLabel = document.createElement('td');
   tfLabel.colSpan = 4;
   tfLabel.textContent = 'TOTAL (' + plural(sessions.length, 'session', 'sessions') + ')';
   tfoot.appendChild(tfLabel);
   // Trend (skip)
-  var tfTrend = document.createElement('td');
+  const tfTrend = document.createElement('td');
   tfTrend.textContent = '';
   tfoot.appendChild(tfTrend);
   // Remaining
-  var tfRem = document.createElement('td');
+  const tfRem = document.createElement('td');
   tfRem.className = 'cell-right';
   tfRem.textContent = fmtTokens(totalRemaining);
   tfoot.appendChild(tfRem);
   // Tokens
-  var tfTok = document.createElement('td');
+  const tfTok = document.createElement('td');
   tfTok.className = 'cell-right';
   tfTok.textContent = fmtTokens(totalTokens);
   tfoot.appendChild(tfTok);
   // Cost
-  var tfCost = document.createElement('td');
+  const tfCost = document.createElement('td');
   tfCost.className = 'cell-right';
   tfCost.textContent = fmtCost(totalCost);
   tfoot.appendChild(tfCost);
   // Duration
-  var tfDur = document.createElement('td');
+  const tfDur = document.createElement('td');
   tfDur.className = 'cell-right';
-  tfDur.textContent = fmtDurationSec(totalDur);
+  tfDur.textContent = fmtDur(totalDur, 's');
   tfoot.appendChild(tfDur);
   // Last Seen (skip)
-  var tfSeen = document.createElement('td');
+  const tfSeen = document.createElement('td');
   tfSeen.textContent = '';
   tfoot.appendChild(tfSeen);
   tbody.appendChild(tfoot);
@@ -1105,70 +1092,70 @@ function renderContextSessions(sessions) {
 /* ── Global Stats Page ────────────────────────────────────────── */
 
 async function loadGlobalStats() {
-  var stats = await API.globalStats().catch(function() { return null; });
+  const stats = await API.globalStats().catch(function() { return null; });
   if (!stats) return;
 
-  var totalTokens = (stats.total_tokens_in || 0) + (stats.total_tokens_out || 0);
-  var totalCache = (stats.total_cache_write || 0) + (stats.total_cache_read || 0);
+  const totalTokens = (stats.total_tokens_in || 0) + (stats.total_tokens_out || 0);
+  const totalCache = (stats.total_cache_write || 0) + (stats.total_cache_read || 0);
 
   // P6: accent-colored stat values
-  var elTotalTokens = $('#gs-total-tokens');
+  const elTotalTokens = $('#gs-total-tokens');
   if (elTotalTokens) { elTotalTokens.className = 'stat-value accent-blue'; }
   setText('#gs-total-tokens', fmtTokens(totalTokens));
   setText('#gs-tokens-in', fmtTokens(stats.total_tokens_in));
   setText('#gs-tokens-out', fmtTokens(stats.total_tokens_out));
 
-  var elCacheTotal = $('#gs-cache-total');
+  const elCacheTotal = $('#gs-cache-total');
   if (elCacheTotal) { elCacheTotal.className = 'stat-value accent-green'; }
   setText('#gs-cache-total', fmtTokens(totalCache));
 
-  var elTotalCost = $('#gs-total-cost');
+  const elTotalCost = $('#gs-total-cost');
   if (elTotalCost) { elTotalCost.className = 'stat-value accent-yellow'; }
   setText('#gs-total-cost', fmtCost(stats.total_cost_usd));
 
-  var elDur = $('#gs-total-duration');
+  const elDur = $('#gs-total-duration');
   if (elDur) elDur.className = 'stat-value accent-blue';
-  setText('#gs-total-duration', fmtDuration(stats.total_duration_ms));
+  setText('#gs-total-duration', fmtDur(stats.total_duration_ms));
 
-  var elTotalSessions = $('#gs-total-sessions');
+  const elTotalSessions = $('#gs-total-sessions');
   if (elTotalSessions) { elTotalSessions.className = 'stat-value accent-purple'; }
   setText('#gs-total-sessions', String(stats.total_sessions || 0));
 
   setText('#gs-lines-added', '+' + fmtTokens(stats.total_lines_added));
   setText('#gs-lines-removed', '-' + fmtTokens(stats.total_lines_removed));
-  var linesCard = document.getElementById('gs-lines-added');
+  const linesCard = document.getElementById('gs-lines-added');
   if (linesCard) { var card = linesCard.closest('.stat-card'); if (card) card.style.borderLeft = '2px solid rgba(255,140,0,0.3)'; }
 
-  var elFirst = $('#gs-first-seen');
+  const elFirst = $('#gs-first-seen');
   if (elFirst) elFirst.className = 'stat-value accent-green';
   setText('#gs-first-seen', fmtDateTime(stats.first_seen));
 
   // Last Active: max last_seen_at from current sessions
-  var lastSeen = 0;
+  let lastSeen = 0;
   if (state.projects && state.projects.length > 0) {
     state.projects.forEach(function(p) { if (p.last_active > lastSeen) lastSeen = p.last_active; });
   }
-  var elLast = $('#gs-last-seen');
+  const elLast = $('#gs-last-seen');
   if (elLast) elLast.className = 'stat-value accent-blue';
   setText('#gs-last-seen', lastSeen > 0 ? fmtTimeAgo(lastSeen) : '--');
 
   // Per-project table
-  var tbody = $('#global-projects-tbody');
+  const tbody = $('#global-projects-tbody');
   if (!tbody) return;
 
   while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
 
   // Use stats.projects if available, otherwise fall back to live project data
-  var projects = stats.projects || [];
+  const projects = stats.projects || [];
   if (projects.length === 0 && state.projects && state.projects.length > 0) {
     // Build from live sessions data + per-project summaries (parallel)
-    var summaries = await Promise.all(
+    const summaries = await Promise.all(
       state.projects.map(function(p) {
         return API.projectSummary(p.project_id).catch(function() { return null; });
       })
     );
     projects = state.projects.map(function(p, i) {
-      var s = summaries[i];
+      const s = summaries[i];
       return {
         project_name: p.project_name,
         total_tokens_in: s ? s.tokens_in : 0,
@@ -1181,8 +1168,8 @@ async function loadGlobalStats() {
   }
 
   if (projects.length === 0) {
-    var tr = document.createElement('tr');
-    var td = document.createElement('td');
+    const tr = document.createElement('tr');
+    const td = document.createElement('td');
     td.colSpan = 5;
     td.style.textAlign = 'center';
     td.style.color = 'var(--text-muted)';
@@ -1194,28 +1181,28 @@ async function loadGlobalStats() {
   }
 
   projects.forEach(function(p) {
-    var tr = document.createElement('tr');
+    const tr = document.createElement('tr');
 
-    var tdName = document.createElement('td');
+    const tdName = document.createElement('td');
     tdName.textContent = truncate(p.project_name, 22);
     tr.appendChild(tdName);
 
-    var tdTok = document.createElement('td');
+    const tdTok = document.createElement('td');
     tdTok.className = 'cell-right';
     tdTok.textContent = fmtTokens((p.total_tokens_in || 0) + (p.total_tokens_out || 0));
     tr.appendChild(tdTok);
 
-    var tdCost = document.createElement('td');
+    const tdCost = document.createElement('td');
     tdCost.className = 'cell-right';
     tdCost.textContent = fmtCost(p.total_cost_usd);
     tr.appendChild(tdCost);
 
-    var tdSess = document.createElement('td');
+    const tdSess = document.createElement('td');
     tdSess.className = 'cell-right';
     tdSess.textContent = String(p.total_sessions || 0);
     tr.appendChild(tdSess);
 
-    var tdSeen = document.createElement('td');
+    const tdSeen = document.createElement('td');
     tdSeen.className = 'cell-right';
     tdSeen.textContent = fmtDateTime(p.last_seen);
     tr.appendChild(tdSeen);
@@ -1234,7 +1221,7 @@ async function refreshData() {
   state.isRefreshing = true;
   state.pendingRefresh = false;
   resetRefreshRing();
-  var mainArea = $('.main-area');
+  const mainArea = $('.main-area');
   if (mainArea) mainArea.classList.add('loading');
   try {
     switch (state.currentPage) {
@@ -1245,14 +1232,14 @@ async function refreshData() {
     }
   } catch (e) {
     console.error('Refresh failed:', e);
-    var pageEl = document.getElementById('page-' + state.currentPage);
+    const pageEl = document.getElementById('page-' + state.currentPage);
     if (pageEl) {
-      var existing = pageEl.querySelector('.error-state');
+      const existing = pageEl.querySelector('.error-state');
       if (!existing) {
-        var errDiv = document.createElement('div');
+        const errDiv = document.createElement('div');
         errDiv.className = 'error-state';
         errDiv.textContent = 'Failed to load data. ';
-        var retrySpan = document.createElement('span');
+        const retrySpan = document.createElement('span');
         retrySpan.className = 'retry-link';
         retrySpan.textContent = 'Retry';
         retrySpan.addEventListener('click', function() {
@@ -1277,9 +1264,9 @@ async function refreshData() {
 /* ── Sidebar Toggle (mobile) ──────────────────────────────────── */
 
 function setupSidebar() {
-  var toggle = $('.nav-toggle');
-  var sidebar = $('.sidebar');
-  var overlay = $('.sidebar-overlay');
+  const toggle = $('.nav-toggle');
+  const sidebar = $('.sidebar');
+  const overlay = $('.sidebar-overlay');
 
   if (toggle) {
     toggle.addEventListener('click', function() {
@@ -1300,7 +1287,7 @@ function setupSidebar() {
 
 function setupTimeFilter() {
   // Restore from localStorage
-  var saved = localStorage.getItem('sm_timeRange');
+  const saved = localStorage.getItem('sm_timeRange');
   if (saved && TIME_RANGES[saved]) {
     state.timeRange = saved;
     $$('.time-filter-bar button[data-range]').forEach(function(b) {
@@ -1364,12 +1351,12 @@ function setupKeyboardShortcuts() {
 /* ── 3.6 Auto-refresh Progress Ring ──────────────────────────── */
 
 function startRefreshRing() {
-  var progress = document.querySelector('.refresh-progress');
+  const progress = document.querySelector('.refresh-progress');
   if (!progress) return;
-  var totalDash = 50.27;
-  var elapsed = 0;
-  var intervalMs = 1000;
-  var cycleSec = 30;
+  const totalDash = 50.27;
+  let elapsed = 0;
+  const intervalMs = 1000;
+  const cycleSec = 30;
 
   if (state.refreshProgressTimer) clearInterval(state.refreshProgressTimer);
   progress.style.strokeDashoffset = String(totalDash);
@@ -1377,7 +1364,7 @@ function startRefreshRing() {
 
   state.refreshProgressTimer = setInterval(function() {
     elapsed++;
-    var offset = totalDash - (totalDash * elapsed / cycleSec);
+    let offset = totalDash - (totalDash * elapsed / cycleSec);
     if (offset < 0) offset = 0;
     progress.style.strokeDashoffset = String(offset);
     if (elapsed >= cycleSec) elapsed = 0;
@@ -1385,7 +1372,7 @@ function startRefreshRing() {
 }
 
 function resetRefreshRing() {
-  var progress = document.querySelector('.refresh-progress');
+  const progress = document.querySelector('.refresh-progress');
   if (progress) progress.style.strokeDashoffset = '50.27';
 }
 
@@ -1399,8 +1386,8 @@ async function init() {
 
   // P7: hashchange listener for manual URL entry only
   window.addEventListener('hashchange', function() {
-    var hash = window.location.hash.slice(1);
-    var validPages = ['overview', 'ratelimits', 'context', 'global'];
+    const hash = window.location.hash.slice(1);
+    const validPages = ['overview', 'ratelimits', 'context', 'global'];
     if (hash && validPages.indexOf(hash) !== -1 && hash !== state.currentPage) {
       navigateTo(hash);
     }
@@ -1410,9 +1397,9 @@ async function init() {
   await loadProjects();
 
   // P7: read initial page from hash first, then localStorage
-  var hashPage = window.location.hash.replace('#', '');
-  var validPages = ['overview', 'ratelimits', 'context', 'global'];
-  var startPage;
+  const hashPage = window.location.hash.replace('#', '');
+  const validPages = ['overview', 'ratelimits', 'context', 'global'];
+  let startPage;
   if (hashPage && validPages.indexOf(hashPage) !== -1) {
     startPage = hashPage;
   } else {
