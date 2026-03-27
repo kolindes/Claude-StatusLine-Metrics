@@ -166,8 +166,30 @@ CREATE INDEX IF NOT EXISTS idx_rate_est_window_ts
 
 MIGRATIONS: list[tuple[int, str, str]] = [
     (1, "Initial schema", _SCHEMA_SQL),
-    # Future migrations go here:
-    # (2, "Add column X", "ALTER TABLE metrics ADD COLUMN x INTEGER DEFAULT 0;"),
+    (2, "Add rate_windows table and resets indexes", """
+        CREATE TABLE IF NOT EXISTS rate_windows (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            window_type TEXT NOT NULL,
+            resets_at INTEGER NOT NULL,
+            window_start_ts INTEGER,
+            window_end_ts INTEGER,
+            final_rate_pct REAL,
+            total_output INTEGER DEFAULT 0,
+            total_input INTEGER DEFAULT 0,
+            total_in_out INTEGER DEFAULT 0,
+            estimated_cap_output INTEGER,
+            estimated_cap_input INTEGER,
+            estimated_cap_all INTEGER,
+            is_complete INTEGER DEFAULT 0,
+            UNIQUE(window_type, resets_at)
+        );
+        CREATE INDEX IF NOT EXISTS idx_rate_windows_type_complete
+            ON rate_windows(window_type, is_complete);
+        CREATE INDEX IF NOT EXISTS idx_metrics_rate5h_resets
+            ON metrics(rate_5h_resets);
+        CREATE INDEX IF NOT EXISTS idx_metrics_rate7d_resets
+            ON metrics(rate_7d_resets);
+    """),
 ]
 
 # ── Connection helpers ───────────────────────────────────────────────
@@ -1076,114 +1098,117 @@ def get_response_time(
 # ── Analytics: rate estimation, prediction ───────────────────────────
 
 
-def compute_rate_estimates(conn: sqlite3.Connection) -> int:
-    """Compute token budget estimates from consecutive rate-limit changes.
+def compute_rate_windows(conn: sqlite3.Connection) -> int:
+    """Compute token budget estimates using complete rate-limit windows.
 
-    Algorithm (spec 7.1):
-    - For each pair of consecutive records within the same session,
-      compute delta_tokens and delta_rate.
-    - If delta_rate > 0.1 and delta_tokens > 0, estimate total budget.
-    - Filter outliers (estimated_total > 50M or < 100k).
-    - Insert valid estimates into rate_estimates table.
-    - Update global_stats with averaged estimates.
+    Groups metrics by normalized resets_at (5-min buckets to absorb clock skew),
+    aggregates token deltas per session then across sessions, and estimates the
+    total token cap for each window.  Results are upserted into rate_windows.
 
-    Returns the number of new estimates inserted.
+    Returns the number of windows upserted.
     """
     inserted = 0
-    cutoff = int(time.time()) - config.SECONDS_PER_DAY
 
     for window_type, rate_col, resets_col in [
         ("5h", "rate_5h_pct", "rate_5h_resets"),
         ("7d", "rate_7d_pct", "rate_7d_resets"),
     ]:
+        # Normalize resets_at to 5-min buckets to absorb clock skew
+        norm = f"({resets_col} / 300) * 300"
+
+        # Single query: aggregate per window (grouped by normalized resets_at)
         sql = f"""
-            WITH ordered AS (
+            WITH session_deltas AS (
                 SELECT
-                    ts,
+                    {norm} AS norm_resets,
                     session_id,
-                    tokens_in,
-                    tokens_out,
-                    {rate_col},
-                    {resets_col},
-                    LAG(tokens_in)    OVER (PARTITION BY session_id ORDER BY ts) AS prev_tin,
-                    LAG(tokens_out)   OVER (PARTITION BY session_id ORDER BY ts) AS prev_tout,
-                    LAG({rate_col})   OVER (PARTITION BY session_id ORDER BY ts) AS prev_rate,
-                    LAG({resets_col}) OVER (PARTITION BY session_id ORDER BY ts) AS prev_resets
+                    MAX(tokens_out) - MIN(tokens_out) AS d_out,
+                    MAX(tokens_in) - MIN(tokens_in) AS d_in,
+                    MIN(ts) AS first_ts,
+                    MAX(ts) AS last_ts,
+                    MAX({rate_col}) AS max_rate
                 FROM metrics
-                WHERE {rate_col} IS NOT NULL AND {rate_col} > 0 AND ts >= ?
+                WHERE {resets_col} > 0 AND {rate_col} > 0
+                GROUP BY {norm}, session_id
             ),
-            deltas AS (
+            window_agg AS (
                 SELECT
-                    ts,
-                    session_id,
-                    (tokens_in + tokens_out) - (prev_tin + prev_tout) AS delta_tokens,
-                    ({rate_col} - prev_rate) AS delta_pct
-                FROM ordered
-                WHERE prev_tin IS NOT NULL
-                  AND prev_tout IS NOT NULL
-                  AND prev_rate IS NOT NULL
-                  AND {resets_col} = prev_resets
+                    norm_resets,
+                    SUM(d_out) AS total_output,
+                    SUM(d_in) AS total_input,
+                    SUM(d_out + d_in) AS total_in_out,
+                    MAX(max_rate) AS final_rate_pct,
+                    MIN(first_ts) AS window_start_ts,
+                    MAX(last_ts) AS window_end_ts
+                FROM session_deltas
+                GROUP BY norm_resets
             )
-            SELECT
-                ts,
-                session_id,
-                delta_pct,
-                delta_tokens,
-                CAST(ROUND(delta_tokens * 1.0 / delta_pct * 100) AS INTEGER) AS estimated_total
-            FROM deltas
-            WHERE delta_pct > 0.1
-              AND delta_tokens > 0
-              AND CAST(ROUND(delta_tokens * 1.0 / delta_pct * 100) AS INTEGER) >= 100000
-              AND CAST(ROUND(delta_tokens * 1.0 / delta_pct * 100) AS INTEGER) <= 50000000
+            SELECT * FROM window_agg
+            WHERE total_in_out > 0
+              AND final_rate_pct >= 3.0
+            ORDER BY norm_resets ASC
         """
-        rows = conn.execute(sql, (cutoff,)).fetchall()
+        rows = conn.execute(sql).fetchall()
 
         conn.execute("BEGIN IMMEDIATE")
         try:
-            for row in rows:
-                # Avoid duplicates: skip if we already have an estimate with
-                # the same ts + session_id + window_type
-                existing = conn.execute(
-                    "SELECT 1 FROM rate_estimates "
-                    "WHERE ts = ? AND session_id = ? AND window_type = ?",
-                    (row["ts"], row["session_id"], window_type),
-                ).fetchone()
-                if existing:
-                    continue
+            for i, row in enumerate(rows):
+                # A window is complete if a later window exists
+                is_complete = 1 if i < len(rows) - 1 else 0
 
-                conn.execute(
-                    """
-                    INSERT INTO rate_estimates
-                        (ts, session_id, window_type, delta_pct, delta_tokens, estimated_total)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                    """,
-                    (row["ts"], row["session_id"], window_type,
-                     row["delta_pct"], row["delta_tokens"], row["estimated_total"]),
-                )
+                frp = row["final_rate_pct"]
+                to = row["total_output"]
+                ti = row["total_input"]
+                tio = row["total_in_out"]
+
+                # Estimate cap: tokens / rate% * 100
+                cap_out = int(round(to / frp * 100)) if frp >= 3 and to > 0 else None
+                cap_in = int(round(ti / frp * 100)) if frp >= 3 and ti > 0 else None
+                cap_all = int(round(tio / frp * 100)) if frp >= 3 and tio > 0 else None
+
+                # Filter unreasonable caps (must be 100k..50M)
+                if cap_out is not None and not (100_000 <= cap_out <= 50_000_000):
+                    cap_out = None
+                if cap_in is not None and not (100_000 <= cap_in <= 50_000_000):
+                    cap_in = None
+                if cap_all is not None and not (100_000 <= cap_all <= 50_000_000):
+                    cap_all = None
+
+                conn.execute("""
+                    INSERT INTO rate_windows
+                        (window_type, resets_at, window_start_ts, window_end_ts,
+                         final_rate_pct, total_output, total_input, total_in_out,
+                         estimated_cap_output, estimated_cap_input, estimated_cap_all,
+                         is_complete)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(window_type, resets_at) DO UPDATE SET
+                        window_end_ts = excluded.window_end_ts,
+                        final_rate_pct = excluded.final_rate_pct,
+                        total_output = excluded.total_output,
+                        total_input = excluded.total_input,
+                        total_in_out = excluded.total_in_out,
+                        estimated_cap_output = excluded.estimated_cap_output,
+                        estimated_cap_input = excluded.estimated_cap_input,
+                        estimated_cap_all = excluded.estimated_cap_all,
+                        is_complete = excluded.is_complete
+                """, (
+                    window_type, row["norm_resets"],
+                    row["window_start_ts"], row["window_end_ts"],
+                    frp, to, ti, tio,
+                    cap_out, cap_in, cap_all, is_complete,
+                ))
                 inserted += 1
             conn.commit()
         except Exception:
             conn.rollback()
             raise
 
-    # Update global_stats with averaged estimates
-    for window_type, est_col, samples_col in [
-        ("5h", "estimated_5h_tokens", "est_5h_samples"),
-        ("7d", "estimated_7d_tokens", "est_7d_samples"),
-    ]:
-        agg_row = conn.execute(
-            "SELECT AVG(estimated_total) AS avg_est, COUNT(*) AS cnt "
-            "FROM rate_estimates WHERE window_type = ?",
-            (window_type,),
-        ).fetchone()
-        if agg_row and agg_row["cnt"] > 0:
-            conn.execute(
-                f"UPDATE global_stats SET {est_col} = ?, {samples_col} = ?",
-                (int(agg_row["avg_est"]), agg_row["cnt"]),
-            )
-            conn.commit()
+    # Cleanup old windows (>90 days)
+    cutoff = int(time.time()) - 90 * config.SECONDS_PER_DAY
+    conn.execute("DELETE FROM rate_windows WHERE window_end_ts < ?", (cutoff,))
+    conn.commit()
 
-    logger.info("Rate estimates: inserted %d new samples", inserted)
+    logger.info("Rate windows: upserted %d windows", inserted)
     return inserted
 
 
@@ -1260,51 +1285,70 @@ def predict_exhaustion(
 def get_rate_estimates(
     conn: sqlite3.Connection, window_type: str = "5h"
 ) -> dict[str, Any]:
-    """Return aggregated rate budget estimates for the dashboard.
+    """Return aggregated rate budget estimates from rate_windows.
 
-    Returns min, max, avg, median, and sample count for the given window type.
+    Self-calibrates by picking the token type (output, input, all) with the
+    lowest median absolute deviation across completed windows.
+
+    Returns min, max, avg, median, sample count, and the auto-selected
+    token_type for the given window type.
     """
     if window_type not in ("5h", "7d"):
         window_type = "5h"
 
-    sql = """
-        SELECT
-            MIN(estimated_total)  AS min_est,
-            MAX(estimated_total)  AS max_est,
-            AVG(estimated_total)  AS avg_est,
-            COUNT(*)              AS samples
-        FROM rate_estimates
-        WHERE window_type = ?
-    """
-    row = conn.execute(sql, (window_type,)).fetchone()
+    # Try completed windows first (last 90 days)
+    rows = conn.execute("""
+        SELECT estimated_cap_output, estimated_cap_input, estimated_cap_all
+        FROM rate_windows
+        WHERE window_type = ? AND is_complete = 1
+        ORDER BY resets_at DESC
+        LIMIT 100
+    """, (window_type,)).fetchall()
 
-    if not row or row["samples"] == 0:
-        return {
-            "window": window_type,
-            "min": None,
-            "max": None,
-            "avg": None,
-            "median": None,
-            "samples": 0,
-        }
+    if len(rows) < 1:
+        # Fallback: include current incomplete window if rate% is meaningful
+        rows = conn.execute("""
+            SELECT estimated_cap_output, estimated_cap_input, estimated_cap_all
+            FROM rate_windows
+            WHERE window_type = ? AND final_rate_pct >= 5
+            ORDER BY resets_at DESC
+            LIMIT 10
+        """, (window_type,)).fetchall()
 
-    # Compute median separately (SQLite has no built-in MEDIAN)
-    median_sql = """
-        SELECT estimated_total
-        FROM rate_estimates
-        WHERE window_type = ?
-        ORDER BY estimated_total
-        LIMIT 1
-        OFFSET (SELECT COUNT(*) / 2 FROM rate_estimates WHERE window_type = ?)
-    """
-    med_row = conn.execute(median_sql, (window_type, window_type)).fetchone()
-    median_val = med_row["estimated_total"] if med_row else None
+    if not rows:
+        return {"window": window_type, "avg": None, "min": None, "max": None,
+                "median": None, "samples": 0, "token_type": None}
 
+    # Self-calibrate: pick token type with lowest MAD (median absolute deviation)
+    best_type = "all"
+    best_mad = float("inf")
+    for ttype, col in [("output", "estimated_cap_output"),
+                        ("input", "estimated_cap_input"),
+                        ("all", "estimated_cap_all")]:
+        vals = [r[col] for r in rows if r[col] is not None]
+        if len(vals) >= 3:
+            med = sorted(vals)[len(vals) // 2]
+            mad = sum(abs(v - med) for v in vals) / len(vals)
+            if mad < best_mad:
+                best_mad = mad
+                best_type = ttype
+        elif len(vals) >= 1 and best_mad == float("inf"):
+            best_type = ttype  # fallback to whatever has data
+
+    col = f"estimated_cap_{best_type}"
+    caps = [r[col] for r in rows if r[col] is not None]
+
+    if not caps:
+        return {"window": window_type, "avg": None, "min": None, "max": None,
+                "median": None, "samples": 0, "token_type": best_type}
+
+    caps_sorted = sorted(caps)
     return {
         "window": window_type,
-        "min": row["min_est"],
-        "max": row["max_est"],
-        "avg": round(row["avg_est"]) if row["avg_est"] else None,
-        "median": median_val,
-        "samples": row["samples"],
+        "avg": int(sum(caps) / len(caps)),
+        "min": min(caps),
+        "max": max(caps),
+        "median": caps_sorted[len(caps_sorted) // 2],
+        "samples": len(caps),
+        "token_type": best_type,
     }

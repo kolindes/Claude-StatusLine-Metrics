@@ -38,7 +38,7 @@ from server.database import (  # noqa: E402
     INTERVAL_MAP,
     PERIOD_MAP,
     cleanup,
-    compute_rate_estimates,
+    compute_rate_windows,
     get_active_sessions,
     get_all_projects_summary,
     get_connection,
@@ -80,7 +80,7 @@ app = Flask(
 )
 
 _START_TIME: float = time.time()
-_last_rate_estimate_ts: float = 0
+_last_rate_window_ts: float = 0
 
 # Required fields for POST /api/metrics
 _REQUIRED_FIELDS: list[str] = ["ts", "sid", "pid", "pname", "ppath", "host", "model"]
@@ -327,18 +327,18 @@ def api_rate_limits_prediction() -> tuple[Response, int]:
 
 @app.route("/api/rate-limits/estimates", methods=["GET"])
 def api_rate_limits_estimates() -> tuple[Response, int]:
-    """Aggregated token budget estimates from rate limit observations."""
-    global _last_rate_estimate_ts
+    """Aggregated token budget estimates from rate-limit window observations."""
+    global _last_rate_window_ts
     window = request.args.get("window", "5h")
     db = get_db()
-    # Recompute estimates at most once every 5 minutes
+    # Recompute windows at most once every 5 minutes
     now = time.time()
-    if now - _last_rate_estimate_ts > 300:
+    if now - _last_rate_window_ts > 300:
         try:
-            compute_rate_estimates(db)
-            _last_rate_estimate_ts = now
+            compute_rate_windows(db)
+            _last_rate_window_ts = now
         except Exception:
-            logger.exception("On-demand compute_rate_estimates failed")
+            logger.exception("On-demand compute_rate_windows failed")
     data = get_rate_estimates(db, window_type=window)
     return jsonify(data), 200
 
@@ -439,11 +439,11 @@ class _BackgroundScheduler(threading.Thread):
                     conn = get_connection()
                     try:
                         cleanup(conn)
-                        compute_rate_estimates(conn)
+                        compute_rate_windows(conn)
                     finally:
                         conn.close()
                 except Exception:
-                    logger.exception("Scheduled cleanup / rate estimates failed")
+                    logger.exception("Scheduled cleanup / rate windows failed")
                 last_cleanup = now
 
     def stop(self) -> None:
