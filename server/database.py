@@ -1021,6 +1021,19 @@ def get_sessions(
     where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
     params.append(limit)
 
+    # Period-based delta subqueries (if from_ts/to_ts provided)
+    period_cols = ""
+    if from_ts is not None and to_ts is not None:
+        period_cols = f""",
+            (SELECT MAX(m.tokens_in) - MIN(m.tokens_in) FROM metrics m
+             WHERE m.session_id = s.session_id AND m.ts >= {int(from_ts)} AND m.ts <= {int(to_ts)}) AS period_tokens_in,
+            (SELECT MAX(m.tokens_out) - MIN(m.tokens_out) FROM metrics m
+             WHERE m.session_id = s.session_id AND m.ts >= {int(from_ts)} AND m.ts <= {int(to_ts)}) AS period_tokens_out,
+            (SELECT MAX(m.cost_usd) - MIN(m.cost_usd) FROM metrics m
+             WHERE m.session_id = s.session_id AND m.ts >= {int(from_ts)} AND m.ts <= {int(to_ts)}) AS period_cost_usd,
+            (SELECT MAX(m.duration_ms) - MIN(m.duration_ms) FROM metrics m
+             WHERE m.session_id = s.session_id AND m.ts >= {int(from_ts)} AND m.ts <= {int(to_ts)}) AS period_duration_ms"""
+
     sql = f"""
         SELECT
             s.session_id,
@@ -1043,6 +1056,7 @@ def get_sessions(
             (SELECT m.ctx_pct FROM metrics m
              WHERE m.session_id = s.session_id
              ORDER BY m.ts DESC LIMIT 1) AS last_ctx_pct
+            {period_cols}
         FROM sessions s
         {where}
         ORDER BY s.last_seen_at DESC

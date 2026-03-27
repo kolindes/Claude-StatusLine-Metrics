@@ -455,7 +455,7 @@ async function loadOverview() {
 
   // Sessions table
   renderSessionsTable(sessions);
-  setText('#sessions-title', state.timeRange === '30d' || !state.timeRange ? 'Sessions' : 'Sessions (lifetime per session)');
+  setText('#sessions-title', 'Sessions');
 
   // Update timestamp
   state.lastUpdate = Date.now();
@@ -655,9 +655,11 @@ function renderSessionsTable(sessions) {
     }
     const g = grouped[name];
     g.sessions++;
-    g.duration += s.duration_seconds || 0;
-    g.tokens += (s.max_tokens_in || 0) + (s.max_tokens_out || 0);
-    g.cost += s.max_cost_usd || 0;
+    // Use period deltas if available, otherwise fall back to lifetime max
+    const hasPeriod = s.period_tokens_in != null;
+    g.duration += hasPeriod ? Math.round((s.period_duration_ms || 0) / 1000) : (s.duration_seconds || 0);
+    g.tokens += hasPeriod ? ((s.period_tokens_in || 0) + (s.period_tokens_out || 0)) : ((s.max_tokens_in || 0) + (s.max_tokens_out || 0));
+    g.cost += hasPeriod ? (s.period_cost_usd || 0) : (s.max_cost_usd || 0);
     if (s.last_seen_at > g.last_seen_at) { g.last_seen_at = s.last_seen_at; g.model = s.model; }
     const seenDiff = s.last_seen_at ? (nowTs - s.last_seen_at) : Infinity;
     if (seenDiff < 300) g.has_active = true;
@@ -701,12 +703,13 @@ function renderSessionsTable(sessions) {
     tbody.appendChild(tr);
   });
 
-  // Total row
+  // Total row (use same period/lifetime logic as grouped rows)
   let totalTokens = 0, totalCost = 0, totalDur = 0;
   sessions.forEach(function(s) {
-    totalTokens += (s.max_tokens_in || 0) + (s.max_tokens_out || 0);
-    totalCost += s.max_cost_usd || 0;
-    totalDur += s.duration_seconds || 0;
+    const hasPeriod = s.period_tokens_in != null;
+    totalTokens += hasPeriod ? ((s.period_tokens_in || 0) + (s.period_tokens_out || 0)) : ((s.max_tokens_in || 0) + (s.max_tokens_out || 0));
+    totalCost += hasPeriod ? (s.period_cost_usd || 0) : (s.max_cost_usd || 0);
+    totalDur += hasPeriod ? Math.round((s.period_duration_ms || 0) / 1000) : (s.duration_seconds || 0);
   });
   const tfoot = document.createElement('tr');
   tfoot.className = 'sessions-total';
