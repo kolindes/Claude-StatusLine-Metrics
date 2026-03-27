@@ -9,6 +9,17 @@ statusline.sh (each Claude)  -->  metrics-server (SQLite)  -->  Dashboard (:9177
       fire-and-forget                  single host                  browser
 ```
 
+<table>
+<tr>
+<td><img src="screenshots/overview.png" alt="Overview" width="400"></td>
+<td><img src="screenshots/ratelimits.png" alt="Rate Limits" width="400"></td>
+</tr>
+<tr>
+<td><img src="screenshots/context.png" alt="Context Window" width="400"></td>
+<td><img src="screenshots/globalstats.png" alt="Global Statistics" width="400"></td>
+</tr>
+</table>
+
 ## What It Collects
 
 Once per minute, for each project:
@@ -33,7 +44,7 @@ Data is retained for **30 days**. Global statistics (total tokens ever) are kept
 ### 1. Server
 
 ```bash
-git clone https://github.com/user/statusline-metrics.git ~/statusline-metrics
+git clone https://github.com/kolindes/Claude-StatusLine-Metrics.git ~/statusline-metrics
 cd ~/statusline-metrics
 pip install -r server/requirements.txt
 python server/metrics_server.py
@@ -325,41 +336,33 @@ schtasks /create /tn "StatuslineMetrics" /tr "%USERPROFILE%\start_metrics.bat" /
 
 ```
 statusline-metrics/
+├── LICENSE                    # MIT License
 ├── README.md                  # This file
+├── install.sh                 # Setup script (deps + vendor JS)
+├── screenshots/               # Dashboard screenshots
 ├── server/
-│   ├── metrics_server.py      # Flask app (entry point)
-│   ├── database.py            # SQLite init, queries, cleanup
+│   ├── __init__.py
+│   ├── config.py              # Configuration (env vars)
+│   ├── database.py            # SQLite: schema, queries, cleanup
 │   ├── ingest.py              # Ingest pending.jsonl
-│   ├── config.py              # Configuration
+│   ├── metrics_server.py      # Flask app (entry point)
 │   ├── requirements.txt       # flask, waitress
 │   └── static/                # Dashboard
 │       ├── index.html
 │       ├── css/
 │       │   └── dashboard.css
 │       ├── js/
+│       │   ├── api.js
 │       │   ├── app.js
-│       │   ├── charts.js
-│       │   └── api.js
-│       └── vendor/            # Vendored JS libraries
-│           └── chart.js      # Chart.js 4.4.7
-└── install.sh                 # Setup script (vendor libs + dirs)
+│       │   └── charts.js
+│       └── vendor/            # Downloaded by install.sh
+│           └── chart.js
+└── docs/                      # Internal docs (git-ignored)
 ```
-
-## Screenshots
-
-| Overview | Rate Limits |
-|----------|-------------|
-| ![Overview](screenshots/overview.png) | ![Rate Limits](screenshots/ratelimits.png) |
-
-| Context Window | Global Statistics |
-|----------------|-------------------|
-| ![Context](screenshots/context.png) | ![Global Stats](screenshots/globalstats.png) |
 
 ## Dashboard
 
-Dashboard: `http://<server-ip>:9177/`
-
-- Dark theme, minimalist UI
+`http://<server-ip>:9177/` — Dark theme, minimalist UI
 - Binance-style charts (time filters: 1h / 6h / 1d / 7d / 30d)
 - Per-project breakdown
 - Rate limit prediction
@@ -382,7 +385,7 @@ curl -s http://localhost:9177/api/health | python3 -m json.tool
 #     "total_records": 0,
 #     "active_sessions": 0,
 #     "pending_jsonl_exists": false,
-#     "version": "1.0.0"
+#     "version": "1.1.0"
 # }
 
 # 2. Send a test metric manually:
