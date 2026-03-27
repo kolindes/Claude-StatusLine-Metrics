@@ -413,18 +413,17 @@ def cleanup(conn: sqlite3.Connection) -> int:
                 MAX(cost_usd)    - MIN(cost_usd)    AS delta_cost,
                 MAX(duration_ms) - MIN(duration_ms) AS delta_dur,
                 MAX(lines_added) - MIN(lines_added) AS delta_la,
-                MAX(lines_removed) - MIN(lines_removed) AS delta_lr
+                MAX(lines_removed) - MIN(lines_removed) AS delta_lr,
+                MIN(ts)                              AS first_ts,
+                MAX(ts)                              AS last_ts
             FROM deletable
             GROUP BY session_id
         ),
         project_agg AS (
             SELECT
                 sd.project_id,
-                MAX(d.project_name)  AS project_name,
-                MAX(d.project_path)  AS project_path,
-                MIN(d.ts)            AS first_seen,
-                MAX(d.ts)            AS last_seen,
-                COUNT(DISTINCT d.session_id) AS total_sessions,
+                (SELECT project_name FROM metrics WHERE project_id = sd.project_id LIMIT 1) AS project_name,
+                (SELECT project_path FROM metrics WHERE project_id = sd.project_id LIMIT 1) AS project_path,
                 SUM(sd.delta_in)     AS total_tokens_in,
                 SUM(sd.delta_out)    AS total_tokens_out,
                 SUM(sd.delta_cw)     AS total_cache_write,
@@ -432,9 +431,11 @@ def cleanup(conn: sqlite3.Connection) -> int:
                 SUM(sd.delta_cost)   AS total_cost_usd,
                 SUM(sd.delta_dur)    AS total_duration_ms,
                 SUM(sd.delta_la)     AS total_lines_added,
-                SUM(sd.delta_lr)     AS total_lines_removed
+                SUM(sd.delta_lr)     AS total_lines_removed,
+                MIN(sd.first_ts)     AS first_seen,
+                MAX(sd.last_ts)      AS last_seen,
+                COUNT(DISTINCT sd.session_id) AS total_sessions
             FROM session_deltas sd
-            JOIN deletable d USING (project_id, session_id)
             GROUP BY sd.project_id
         )
         INSERT INTO global_stats (
@@ -617,7 +618,7 @@ def get_project_summary(
             COALESCE(SUM(d_out), 0)  AS tokens_out,
             COALESCE(SUM(d_cw), 0)   AS cache_write,
             COALESCE(SUM(d_cr), 0)   AS cache_read,
-            COALESCE(SUM(d_in) + SUM(d_out), 0) AS total_tokens,
+            COALESCE(SUM(d_in), 0) + COALESCE(SUM(d_out), 0) AS total_tokens,
             COALESCE(SUM(d_cost), 0) AS cost_usd,
             COALESCE(SUM(d_dur), 0)  AS duration_ms,
             COUNT(*)                  AS sessions,
@@ -686,7 +687,7 @@ def get_all_projects_summary(
             COALESCE(SUM(d_out), 0) AS tokens_out,
             COALESCE(SUM(d_cw), 0) AS cache_write,
             COALESCE(SUM(d_cr), 0) AS cache_read,
-            COALESCE(SUM(d_in) + SUM(d_out), 0) AS total_tokens,
+            COALESCE(SUM(d_in), 0) + COALESCE(SUM(d_out), 0) AS total_tokens,
             COALESCE(SUM(d_cost), 0) AS cost_usd,
             COALESCE(SUM(d_dur), 0) AS duration_ms,
             COUNT(DISTINCT session_id) AS sessions,
@@ -1182,58 +1183,53 @@ def compute_rate_windows(conn: sqlite3.Connection) -> int:
         """
         rows = conn.execute(sql).fetchall()
 
-        conn.execute("BEGIN IMMEDIATE")
-        try:
-            for i, row in enumerate(rows):
-                # A window is complete if a later window exists
-                is_complete = 1 if i < len(rows) - 1 else 0
+        for i, row in enumerate(rows):
+            # A window is complete if a later window exists
+            is_complete = 1 if i < len(rows) - 1 else 0
 
-                frp = row["final_rate_pct"]
-                to = row["total_output"]
-                ti = row["total_input"]
-                tio = row["total_in_out"]
+            frp = row["final_rate_pct"]
+            to = row["total_output"]
+            ti = row["total_input"]
+            tio = row["total_in_out"]
 
-                # Estimate cap: tokens / rate% * 100
-                cap_out = int(round(to / frp * 100)) if frp >= 3 and to > 0 else None
-                cap_in = int(round(ti / frp * 100)) if frp >= 3 and ti > 0 else None
-                cap_all = int(round(tio / frp * 100)) if frp >= 3 and tio > 0 else None
+            # Estimate cap: tokens / rate% * 100
+            cap_out = int(round(to / frp * 100)) if frp >= 3 and to > 0 else None
+            cap_in = int(round(ti / frp * 100)) if frp >= 3 and ti > 0 else None
+            cap_all = int(round(tio / frp * 100)) if frp >= 3 and tio > 0 else None
 
-                # Filter unreasonable caps (must be 100k..50M)
-                if cap_out is not None and not (100_000 <= cap_out <= 50_000_000):
-                    cap_out = None
-                if cap_in is not None and not (100_000 <= cap_in <= 50_000_000):
-                    cap_in = None
-                if cap_all is not None and not (100_000 <= cap_all <= 50_000_000):
-                    cap_all = None
+            # Filter unreasonable caps (must be 100k..50M)
+            if cap_out is not None and not (100_000 <= cap_out <= 50_000_000):
+                cap_out = None
+            if cap_in is not None and not (100_000 <= cap_in <= 50_000_000):
+                cap_in = None
+            if cap_all is not None and not (100_000 <= cap_all <= 50_000_000):
+                cap_all = None
 
-                conn.execute("""
-                    INSERT INTO rate_windows
-                        (window_type, resets_at, window_start_ts, window_end_ts,
-                         final_rate_pct, total_output, total_input, total_in_out,
-                         estimated_cap_output, estimated_cap_input, estimated_cap_all,
-                         is_complete)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(window_type, resets_at) DO UPDATE SET
-                        window_end_ts = excluded.window_end_ts,
-                        final_rate_pct = excluded.final_rate_pct,
-                        total_output = excluded.total_output,
-                        total_input = excluded.total_input,
-                        total_in_out = excluded.total_in_out,
-                        estimated_cap_output = excluded.estimated_cap_output,
-                        estimated_cap_input = excluded.estimated_cap_input,
-                        estimated_cap_all = excluded.estimated_cap_all,
-                        is_complete = excluded.is_complete
-                """, (
-                    window_type, row["norm_resets"],
-                    row["window_start_ts"], row["window_end_ts"],
-                    frp, to, ti, tio,
-                    cap_out, cap_in, cap_all, is_complete,
-                ))
-                inserted += 1
-            conn.commit()
-        except Exception:
-            conn.rollback()
-            raise
+            conn.execute("""
+                INSERT INTO rate_windows
+                    (window_type, resets_at, window_start_ts, window_end_ts,
+                     final_rate_pct, total_output, total_input, total_in_out,
+                     estimated_cap_output, estimated_cap_input, estimated_cap_all,
+                     is_complete)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(window_type, resets_at) DO UPDATE SET
+                    window_end_ts = excluded.window_end_ts,
+                    final_rate_pct = excluded.final_rate_pct,
+                    total_output = excluded.total_output,
+                    total_input = excluded.total_input,
+                    total_in_out = excluded.total_in_out,
+                    estimated_cap_output = excluded.estimated_cap_output,
+                    estimated_cap_input = excluded.estimated_cap_input,
+                    estimated_cap_all = excluded.estimated_cap_all,
+                    is_complete = excluded.is_complete
+            """, (
+                window_type, row["norm_resets"],
+                row["window_start_ts"], row["window_end_ts"],
+                frp, to, ti, tio,
+                cap_out, cap_in, cap_all, is_complete,
+            ))
+            inserted += 1
+        conn.commit()
 
     # Cleanup old windows (>90 days)
     cutoff = int(time.time()) - 90 * config.SECONDS_PER_DAY

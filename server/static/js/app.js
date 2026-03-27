@@ -49,8 +49,8 @@ function fmtTokens(n) {
   n = Math.round(n);
   if (n >= 1_000_000_000) return (n / 1_000_000_000).toFixed(2) + 'B';
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
-  if (n >= 100) return (n / 1_000).toFixed(1) + 'k';
-  return '<0.1k';
+  if (n >= 1_000) return (n / 1_000).toFixed(1) + 'k';
+  return String(n);
 }
 
 function fmtPct(n) {
@@ -298,6 +298,7 @@ function updateSubtitle() {
 
 function selectProject(projectId) {
   state.currentProject = projectId;
+  state.prevKpi = {};
 
   // Update sidebar active
   $$('.sidebar-projects a').forEach(function(a) {
@@ -854,7 +855,7 @@ async function loadRateLimits() {
 
 function ctxColor(pct) {
   if (pct >= 80) return 'var(--red, #ef6461)';
-  if (pct >= 50) return 'var(--yellow, #ff8c00)';
+  if (pct >= 50) return 'var(--amber, #ffaa33)';
   return 'var(--green, #4ade80)';
 }
 
@@ -931,6 +932,7 @@ function renderContextSessions(sessions) {
   }
 
   // Group by project: keep the session with highest ctx% per project, sum metrics
+  // Use separate _total* accumulators to avoid double-counting via Object.assign
   const projMap = {};
   sessions.forEach(function(s) {
     const name = s.project_name || 'unknown';
@@ -939,19 +941,19 @@ function renderContextSessions(sessions) {
       // Keep the session with highest context as the "representative"
       projMap[name] = Object.assign({}, s, {
         _session_count: (existing ? existing._session_count : 0) + 1,
-        max_tokens_in: ((existing ? existing.max_tokens_in : 0) || 0) + (s.max_tokens_in || 0),
-        max_tokens_out: ((existing ? existing.max_tokens_out : 0) || 0) + (s.max_tokens_out || 0),
-        max_cost_usd: ((existing ? existing.max_cost_usd : 0) || 0) + (s.max_cost_usd || 0),
-        duration_seconds: ((existing ? existing.duration_seconds : 0) || 0) + (s.duration_seconds || 0),
-        compressions: ((existing ? existing.compressions : 0) || 0) + (s.compressions || 0),
+        _totalTokensIn: ((existing ? existing._totalTokensIn : 0) || 0) + (s.max_tokens_in || 0),
+        _totalTokensOut: ((existing ? existing._totalTokensOut : 0) || 0) + (s.max_tokens_out || 0),
+        _totalCost: ((existing ? existing._totalCost : 0) || 0) + (s.max_cost_usd || 0),
+        _totalDuration: ((existing ? existing._totalDuration : 0) || 0) + (s.duration_seconds || 0),
+        _totalCompressions: ((existing ? existing._totalCompressions : 0) || 0) + (s.compressions || 0),
       });
     } else {
       projMap[name]._session_count = (projMap[name]._session_count || 1) + 1;
-      projMap[name].max_tokens_in = (projMap[name].max_tokens_in || 0) + (s.max_tokens_in || 0);
-      projMap[name].max_tokens_out = (projMap[name].max_tokens_out || 0) + (s.max_tokens_out || 0);
-      projMap[name].max_cost_usd = (projMap[name].max_cost_usd || 0) + (s.max_cost_usd || 0);
-      projMap[name].duration_seconds = (projMap[name].duration_seconds || 0) + (s.duration_seconds || 0);
-      projMap[name].compressions = (projMap[name].compressions || 0) + (s.compressions || 0);
+      projMap[name]._totalTokensIn = (projMap[name]._totalTokensIn || 0) + (s.max_tokens_in || 0);
+      projMap[name]._totalTokensOut = (projMap[name]._totalTokensOut || 0) + (s.max_tokens_out || 0);
+      projMap[name]._totalCost = (projMap[name]._totalCost || 0) + (s.max_cost_usd || 0);
+      projMap[name]._totalDuration = (projMap[name]._totalDuration || 0) + (s.duration_seconds || 0);
+      projMap[name]._totalCompressions = (projMap[name]._totalCompressions || 0) + (s.compressions || 0);
       // Keep higher last_seen_at
       if ((s.last_seen_at || 0) > (projMap[name].last_seen_at || 0)) {
         projMap[name].last_seen_at = s.last_seen_at;
@@ -1058,7 +1060,7 @@ function renderContextSessions(sessions) {
       tdTrend.style.color = 'var(--green)';
     }
     // Append compression count if any
-    const comp = s.compressions || 0;
+    const comp = s._totalCompressions || 0;
     if (comp > 0) {
       const compSpan = document.createElement('span');
       compSpan.style.cssText = 'margin-left:6px;font-size:0.6rem;color:var(--amber);opacity:0.8';
@@ -1082,19 +1084,19 @@ function renderContextSessions(sessions) {
     // Tokens column (total in+out for session)
     const tdTok = document.createElement('td');
     tdTok.className = 'cell-right cell-mono';
-    tdTok.textContent = fmtTokens((s.max_tokens_in || 0) + (s.max_tokens_out || 0));
+    tdTok.textContent = fmtTokens((s._totalTokensIn || 0) + (s._totalTokensOut || 0));
     tr.appendChild(tdTok);
 
     // Cost column
     const tdCost = document.createElement('td');
     tdCost.className = 'cell-right cell-mono';
-    tdCost.textContent = fmtCost(s.max_cost_usd);
+    tdCost.textContent = fmtCost(s._totalCost);
     tr.appendChild(tdCost);
 
     // Duration column
     const tdDur = document.createElement('td');
     tdDur.className = 'cell-right cell-mono';
-    tdDur.textContent = fmtDur(s.duration_seconds, 's');
+    tdDur.textContent = fmtDur(s._totalDuration, 's');
     tr.appendChild(tdDur);
 
     // Last Seen column
@@ -1351,6 +1353,7 @@ function setupTimeFilter() {
   $$('.time-filter-bar button[data-range]').forEach(function(btn) {
     btn.addEventListener('click', function() {
       state.timeRange = btn.dataset.range;
+      state.prevKpi = {};
       localStorage.setItem('sm_timeRange', btn.dataset.range);
       $$('.time-filter-bar button[data-range]').forEach(function(b) {
         b.classList.toggle('active', b === btn);
@@ -1379,6 +1382,10 @@ function setupNav() {
 function startPolling() {
   if (state.pollTimer) clearTimeout(state.pollTimer);
   async function poll() {
+    if (state.isRefreshing) {
+      state.pollTimer = setTimeout(poll, 30000);
+      return;
+    }
     try {
       await loadProjects();
       await refreshData();
@@ -1484,7 +1491,7 @@ async function init() {
     var ctrl = new AbortController();
     var tid = setTimeout(function() { ctrl.abort(); }, 5000);
     fetch('https://api.github.com/repos/' + GITHUB_REPO, { signal: ctrl.signal })
-      .then(function(r) { return r.json(); })
+      .then(function(r) { if (!r.ok) throw new Error(r.status); return r.json(); })
       .then(function(d) {
         if (d && typeof d.stargazers_count === 'number') {
           var el = document.getElementById('github-stars-count');
@@ -1499,11 +1506,14 @@ async function init() {
   }
 }
 
-// Wait for DOM and Chart.js
+// Wait for DOM and Chart.js (with retry for CDN fallback race)
 document.addEventListener('DOMContentLoaded', function() {
-  if (typeof Chart !== 'undefined') {
-    init();
-  } else {
-    window.addEventListener('load', init);
+  function tryInit() {
+    if (typeof Chart !== 'undefined') {
+      init();
+    } else {
+      setTimeout(tryInit, 500);
+    }
   }
+  tryInit();
 });

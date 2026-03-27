@@ -87,31 +87,40 @@ _REQUIRED_FIELDS: list[str] = ["ts", "sid", "pid", "pname", "ppath", "host", "mo
 
 # ── Rate limiting ────────────────────────────────────────────────
 
+_rate_lock = threading.Lock()
 _rate_limit_store: dict[str, tuple[int, float]] = {}  # session_id -> (count, window_start)
 RATE_LIMIT_MAX = 120  # max 120 writes per minute per session
 
 
 def _check_rate_limit(session_id: str) -> bool:
     """Return True if the request is within rate limits, False otherwise."""
-    if len(_rate_limit_store) > 10000:
-        _rate_limit_store.clear()
     now = time.time()
-    entry = _rate_limit_store.get(session_id)
-    if entry is None or now - entry[1] > 60:
-        _rate_limit_store[session_id] = (1, now)
+    with _rate_lock:
+        # Evict expired instead of nuking the entire store
+        if len(_rate_limit_store) > 10000:
+            expired = [k for k, (_, t) in _rate_limit_store.items() if now - t > 120]
+            for k in expired:
+                del _rate_limit_store[k]
+            # If still over limit after eviction, allow (don't nuke)
+            if len(_rate_limit_store) > 10000:
+                return True
+        entry = _rate_limit_store.get(session_id)
+        if entry is None or now - entry[1] > 60:
+            _rate_limit_store[session_id] = (1, now)
+            return True
+        if entry[0] >= RATE_LIMIT_MAX:
+            return False
+        _rate_limit_store[session_id] = (entry[0] + 1, entry[1])
         return True
-    if entry[0] >= RATE_LIMIT_MAX:
-        return False
-    _rate_limit_store[session_id] = (entry[0] + 1, entry[1])
-    return True
 
 
 def _cleanup_rate_limit_store() -> None:
     """Remove expired entries from the rate-limit store."""
     now = time.time()
-    expired = [sid for sid, (_, start) in _rate_limit_store.items() if now - start > 120]
-    for sid in expired:
-        del _rate_limit_store[sid]
+    with _rate_lock:
+        expired = [sid for sid, (_, start) in _rate_limit_store.items() if now - start > 120]
+        for sid in expired:
+            del _rate_limit_store[sid]
 
 # ── Per-request database connection ──────────────────────────────────
 
