@@ -476,6 +476,7 @@ POST /api/metrics                    — приём метрик от клиен
 GET  /api/health                     — статус сервера
 GET  /api/projects                   — список проектов
 GET  /api/projects/:id/summary       — сводка по проекту
+GET  /api/projects/summary-all       — агрегированная сводка по всем проектам
 GET  /api/metrics                    — time-series (project_id, from, to, interval)
 GET  /api/rate-limits/current        — текущие 5h/7d лимиты
 GET  /api/rate-limits/history        — история rate limits
