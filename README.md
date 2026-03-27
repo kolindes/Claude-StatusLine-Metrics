@@ -347,8 +347,7 @@ statusline-metrics/
 │       │   ├── charts.js
 │       │   └── api.js
 │       └── vendor/            # Локальные JS-библиотеки
-│           ├── lightweight-charts.js
-│           └── chart.js
+│           └── chart.js      # Chart.js 4.4.7
 └── install.sh                 # Установка (vendor libs + dirs)
 ```
 

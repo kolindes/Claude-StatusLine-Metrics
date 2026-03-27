@@ -78,20 +78,11 @@ echo ""
 info "Скачиваю JS-библиотеки для дашборда..."
 mkdir -p "$VENDOR_DIR"
 
-LWC_URL="https://unpkg.com/lightweight-charts@4.2.2/dist/lightweight-charts.standalone.production.js"
-CJS_URL="https://cdn.jsdelivr.net/npm/chart.js@4.4/dist/chart.umd.min.js"
-
-if [[ ! -f "$VENDOR_DIR/lightweight-charts.js" ]]; then
-  curl -sL -o "$VENDOR_DIR/lightweight-charts.js" "$LWC_URL" && \
-    ok "lightweight-charts.js ($(wc -c < "$VENDOR_DIR/lightweight-charts.js" | tr -d ' ') bytes)" || \
-    warn "Не удалось скачать lightweight-charts.js (можно позже)"
-else
-  ok "lightweight-charts.js (уже есть)"
-fi
+CJS_URL="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"
 
 if [[ ! -f "$VENDOR_DIR/chart.js" ]]; then
   curl -sL -o "$VENDOR_DIR/chart.js" "$CJS_URL" && \
-    ok "chart.js ($(wc -c < "$VENDOR_DIR/chart.js" | tr -d ' ') bytes)" || \
+    ok "chart.js 4.4.7 ($(wc -c < "$VENDOR_DIR/chart.js" | tr -d ' ') bytes)" || \
     warn "Не удалось скачать chart.js (можно позже)"
 else
   ok "chart.js (уже есть)"

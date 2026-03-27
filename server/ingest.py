@@ -25,6 +25,15 @@ def ingest_pending(conn: sqlite3.Connection) -> int:
     """
     path = Path(config.PENDING_JSONL).expanduser()
 
+    # Check for orphaned .processing file from a previous crash
+    orphan = path.with_suffix('.jsonl.processing')
+    if orphan.exists() and not path.exists():
+        logger.warning("Found orphaned %s from previous crash, recovering", orphan.name)
+        try:
+            orphan.rename(path)
+        except OSError:
+            pass
+
     if not path.exists():
         return 0
 

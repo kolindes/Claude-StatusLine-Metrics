@@ -18,8 +18,8 @@ async function fetchJSON(path, params = {}) {
       url.searchParams.set(key, String(val));
     }
   }
-  var controller = new AbortController();
-  var timeoutId = setTimeout(function() { controller.abort(); }, 10000);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(function() { controller.abort(); }, 10000);
   try {
     const resp = await fetch(url.toString(), { signal: controller.signal });
     if (!resp.ok) {
