@@ -1057,7 +1057,7 @@ def get_sessions(
             s.model,
             s.started_at,
             s.last_seen_at,
-            s.last_seen_at - s.started_at AS duration_seconds,
+            s.max_duration_ms / 1000 AS duration_seconds,
             s.max_ctx_pct,
             s.max_tokens_in,
             s.max_tokens_out,
