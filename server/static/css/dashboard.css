@@ -398,6 +398,27 @@ body::after {
   letter-spacing: 0.1em;
 }
 
+.sidebar-github {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 6px;
+}
+
+.sidebar-github a {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-muted);
+  text-decoration: none;
+  font-size: 0.6rem;
+  transition: color 0.2s;
+}
+
+.sidebar-github a:hover {
+  color: var(--primary);
+}
+
 /* ── Burger / Nav Toggle ─────────────────────────────────────── */
 
 .nav-toggle {

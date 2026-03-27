@@ -1390,6 +1390,24 @@ async function init() {
 
   // 3.6: Start refresh ring animation
   startRefreshRing();
+
+  // Fetch version from server
+  API.health().then(function(h) {
+    if (h && h.version) {
+      const el = document.getElementById('sidebar-version');
+      if (el) el.textContent = 'v' + h.version;
+    }
+  }).catch(function() {});
+
+  // Fetch GitHub stars (non-blocking, best-effort)
+  fetch('https://api.github.com/repos/kolindes/Claude-StatusLine-Metrics', { signal: AbortSignal.timeout(5000) })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d && typeof d.stargazers_count === 'number') {
+        const el = document.getElementById('github-stars-count');
+        if (el) el.textContent = String(d.stargazers_count);
+      }
+    }).catch(function() {});
 }
 
 // Wait for DOM and Chart.js
