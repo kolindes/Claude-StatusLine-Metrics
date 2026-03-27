@@ -364,7 +364,7 @@ def cleanup(conn: sqlite3.Connection) -> int:
 
     Returns the number of deleted rows.
     """
-    threshold = int(time.time()) - config.RETENTION_DAYS * 86400
+    threshold = int(time.time()) - config.RETENTION_DAYS * config.SECONDS_PER_DAY
 
     # Count rows to delete
     row = conn.execute(
@@ -626,6 +626,54 @@ def get_project_summary(
     models_rows = conn.execute(models_sql, models_params).fetchall()
     result["models_used"] = [r["model"] for r in models_rows]
 
+    return result
+
+
+def get_all_projects_summary(
+    conn: sqlite3.Connection,
+    from_ts: int | None = None,
+    to_ts: int | None = None,
+    *,
+    account: str | None = None,
+) -> dict[str, Any]:
+    """Aggregate summary across ALL projects in one query."""
+    acct_clause, acct_params = _account_filter(account)
+    ts_clause = ""
+    ts_params: list[Any] = []
+    if from_ts is not None and to_ts is not None:
+        ts_clause = " AND ts >= ? AND ts <= ?"
+        ts_params = [from_ts, to_ts]
+    params = ts_params + acct_params
+    sql = f"""
+        WITH session_deltas AS (
+            SELECT
+                session_id,
+                MAX(tokens_in) - MIN(tokens_in) AS d_in,
+                MAX(tokens_out) - MIN(tokens_out) AS d_out,
+                MAX(cache_write) - MIN(cache_write) AS d_cw,
+                MAX(cache_read) - MIN(cache_read) AS d_cr,
+                MAX(cost_usd) - MIN(cost_usd) AS d_cost,
+                MAX(duration_ms) - MIN(duration_ms) AS d_dur,
+                AVG(ctx_pct) AS avg_ctx
+            FROM metrics
+            WHERE 1=1 {ts_clause} {acct_clause}
+            GROUP BY session_id
+        )
+        SELECT
+            COALESCE(SUM(d_in), 0) AS tokens_in,
+            COALESCE(SUM(d_out), 0) AS tokens_out,
+            COALESCE(SUM(d_cw), 0) AS cache_write,
+            COALESCE(SUM(d_cr), 0) AS cache_read,
+            COALESCE(SUM(d_in) + SUM(d_out), 0) AS total_tokens,
+            COALESCE(SUM(d_cost), 0) AS cost_usd,
+            COALESCE(SUM(d_dur), 0) AS duration_ms,
+            COUNT(DISTINCT session_id) AS sessions,
+            COALESCE(AVG(avg_ctx), 0) AS avg_ctx_pct
+        FROM session_deltas
+    """
+    row = conn.execute(sql, params).fetchone()
+    result = _row_to_dict(row) if row else {}
+    result["models_used"] = []
     return result
 
 
@@ -1034,7 +1082,7 @@ def compute_rate_estimates(conn: sqlite3.Connection) -> int:
     Returns the number of new estimates inserted.
     """
     inserted = 0
-    cutoff = int(time.time()) - 86400
+    cutoff = int(time.time()) - config.SECONDS_PER_DAY
 
     for window_type, rate_col, resets_col in [
         ("5h", "rate_5h_pct", "rate_5h_resets"),

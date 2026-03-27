@@ -638,34 +638,19 @@ body::after {
   text-overflow: ellipsis;
 }
 
-/* Accent color variations for KPI values */
-.kpi-card .kpi-value.accent-blue {
-  color: var(--cyan);
-  text-shadow: 0 0 20px var(--cyan-glow), 0 0 40px rgba(255, 140, 0, 0.1);
-}
-.kpi-card .kpi-value.accent-green {
-  color: var(--green);
-  text-shadow: 0 0 20px var(--green-glow), 0 0 40px rgba(74, 222, 128, 0.1);
-}
-.kpi-card .kpi-value.accent-yellow {
-  color: var(--amber);
-  text-shadow: 0 0 20px var(--amber-glow), 0 0 40px rgba(255, 170, 51, 0.1);
-}
-.kpi-card .kpi-value.accent-red {
-  color: var(--red);
-  text-shadow: 0 0 20px var(--red-glow), 0 0 40px rgba(239, 100, 97, 0.1);
-}
-.kpi-card .kpi-value.accent-purple {
-  color: var(--purple);
-  text-shadow: 0 0 20px var(--purple-glow), 0 0 40px rgba(167, 139, 250, 0.1);
-}
+/* Unified accent color variations (kpi-card + stat-card) */
+.accent-blue   { color: var(--cyan);   text-shadow: 0 0 20px var(--cyan-glow); }
+.accent-green  { color: var(--green);  text-shadow: 0 0 20px rgba(74, 222, 128, 0.15); }
+.accent-yellow { color: var(--amber);  text-shadow: 0 0 20px rgba(255, 170, 51, 0.15); }
+.accent-red    { color: var(--red);    text-shadow: 0 0 20px rgba(239, 100, 97, 0.15); }
+.accent-purple { color: var(--purple); text-shadow: 0 0 20px rgba(167, 139, 250, 0.15); }
 
-/* Accent border glow on hover for colored cards */
-.kpi-card:has(.accent-blue)   { border-left: 2px solid rgba(255, 140, 0, 0.3); }
-.kpi-card:has(.accent-green)  { border-left: 2px solid rgba(74, 222, 128, 0.3); }
-.kpi-card:has(.accent-yellow) { border-left: 2px solid rgba(255, 170, 51, 0.3); }
-.kpi-card:has(.accent-red)    { border-left: 2px solid rgba(239, 100, 97, 0.3); }
-.kpi-card:has(.accent-purple) { border-left: 2px solid rgba(167, 139, 250, 0.4); }
+/* Unified accent border for both kpi-card and stat-card */
+.kpi-card:has(.accent-blue),   .stat-card:has(.accent-blue)   { border-left: 2px solid rgba(255, 140, 0, 0.3); }
+.kpi-card:has(.accent-green),  .stat-card:has(.accent-green)  { border-left: 2px solid rgba(74, 222, 128, 0.3); }
+.kpi-card:has(.accent-yellow), .stat-card:has(.accent-yellow) { border-left: 2px solid rgba(255, 170, 51, 0.3); }
+.kpi-card:has(.accent-red),    .stat-card:has(.accent-red)    { border-left: 2px solid rgba(239, 100, 97, 0.3); }
+.kpi-card:has(.accent-purple), .stat-card:has(.accent-purple) { border-left: 2px solid rgba(167, 139, 250, 0.4); }
 
 .kpi-card:has(.accent-blue):hover   { box-shadow: 0 0 25px rgba(255, 140, 0, 0.1), inset 0 0 30px rgba(255, 140, 0, 0.02); }
 .kpi-card:has(.accent-green):hover  { box-shadow: 0 0 25px rgba(74, 222, 128, 0.1), inset 0 0 30px rgba(74, 222, 128, 0.02); }
@@ -1042,12 +1027,7 @@ body::after {
   box-shadow: 0 0 20px rgba(255, 140, 0, 0.06);
 }
 
-/* Accent border for stat-cards with colored values */
-.stat-card:has(.accent-blue)   { border-left: 2px solid rgba(255, 140, 0, 0.3); }
-.stat-card:has(.accent-green)  { border-left: 2px solid rgba(74, 222, 128, 0.3); }
-.stat-card:has(.accent-yellow) { border-left: 2px solid rgba(255, 170, 51, 0.3); }
-.stat-card:has(.accent-red)    { border-left: 2px solid rgba(239, 100, 97, 0.3); }
-.stat-card:has(.accent-purple) { border-left: 2px solid rgba(167, 139, 250, 0.4); }
+/* Accent borders unified above with kpi-card rules */
 
 .stat-card .stat-label {
   font-family: var(--font-mono);
@@ -1069,11 +1049,7 @@ body::after {
   letter-spacing: 0.02em;
 }
 
-.stat-card .stat-value.accent-blue   { color: var(--cyan); text-shadow: 0 0 20px var(--cyan-glow); }
-.stat-card .stat-value.accent-green  { color: var(--green); text-shadow: 0 0 20px var(--green-glow); }
-.stat-card .stat-value.accent-yellow { color: var(--amber); text-shadow: 0 0 20px var(--amber-glow); }
-.stat-card .stat-value.accent-red    { color: var(--red); text-shadow: 0 0 20px var(--red-glow); }
-.stat-card .stat-value.accent-purple { color: var(--purple); text-shadow: 0 0 20px var(--purple-glow); }
+/* Accent colors unified above as standalone .accent-* classes */
 
 .stat-card .stat-sub {
   font-family: var(--font-mono);

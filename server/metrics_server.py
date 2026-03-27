@@ -40,6 +40,7 @@ from server.database import (  # noqa: E402
     cleanup,
     compute_rate_estimates,
     get_active_sessions,
+    get_all_projects_summary,
     get_connection,
     get_context_window_analysis,
     get_db_size,
@@ -79,6 +80,7 @@ app = Flask(
 )
 
 _START_TIME: float = time.time()
+_last_rate_estimate_ts: float = 0
 
 # Required fields for POST /api/metrics
 _REQUIRED_FIELDS: list[str] = ["ts", "sid", "pid", "pname", "ppath", "host", "model"]
@@ -91,6 +93,8 @@ RATE_LIMIT_MAX = 120  # max 120 writes per minute per session
 
 def _check_rate_limit(session_id: str) -> bool:
     """Return True if the request is within rate limits, False otherwise."""
+    if len(_rate_limit_store) > 10000:
+        _rate_limit_store.clear()
     now = time.time()
     entry = _rate_limit_store.get(session_id)
     if entry is None or now - entry[1] > 60:
@@ -100,6 +104,14 @@ def _check_rate_limit(session_id: str) -> bool:
         return False
     _rate_limit_store[session_id] = (entry[0] + 1, entry[1])
     return True
+
+
+def _cleanup_rate_limit_store() -> None:
+    """Remove expired entries from the rate-limit store."""
+    now = time.time()
+    expired = [sid for sid, (_, start) in _rate_limit_store.items() if now - start > 120]
+    for sid in expired:
+        del _rate_limit_store[sid]
 
 # ── Per-request database connection ──────────────────────────────────
 
@@ -238,6 +250,17 @@ def api_projects() -> tuple[Response, int]:
     return jsonify(data), 200
 
 
+@app.route("/api/projects/summary-all", methods=["GET"])
+def api_all_projects_summary() -> tuple[Response, int]:
+    """Aggregate summary across all projects in one query."""
+    db = get_db()
+    from_ts = request.args.get("from", type=int)
+    to_ts = request.args.get("to", type=int)
+    account = request.args.get("account")
+    data = get_all_projects_summary(db, from_ts, to_ts, account=account)
+    return jsonify(data), 200
+
+
 @app.route("/api/projects/<project_id>/summary", methods=["GET"])
 def api_project_summary(project_id: str) -> tuple[Response, int]:
     """Project summary: tokens, cost, duration, sessions, models."""
@@ -305,13 +328,17 @@ def api_rate_limits_prediction() -> tuple[Response, int]:
 @app.route("/api/rate-limits/estimates", methods=["GET"])
 def api_rate_limits_estimates() -> tuple[Response, int]:
     """Aggregated token budget estimates from rate limit observations."""
+    global _last_rate_estimate_ts
     window = request.args.get("window", "5h")
     db = get_db()
-    # Recompute estimates on demand (idempotent, skips duplicates)
-    try:
-        compute_rate_estimates(db)
-    except Exception:
-        logger.exception("On-demand compute_rate_estimates failed")
+    # Recompute estimates at most once every 5 minutes
+    now = time.time()
+    if now - _last_rate_estimate_ts > 300:
+        try:
+            compute_rate_estimates(db)
+            _last_rate_estimate_ts = now
+        except Exception:
+            logger.exception("On-demand compute_rate_estimates failed")
     data = get_rate_estimates(db, window_type=window)
     return jsonify(data), 200
 
@@ -346,7 +373,7 @@ def api_sessions() -> tuple[Response, int]:
     """List sessions, optionally filtered by project, account, and time range."""
     project_id = request.args.get("project_id")
     account = request.args.get("account")
-    limit = request.args.get("limit", 50, type=int)
+    limit = min(request.args.get("limit", 50, type=int), 500)
     from_ts = request.args.get("from", type=int, default=None)
     to_ts = request.args.get("to", type=int, default=None)
     db = get_db()
@@ -403,6 +430,8 @@ class _BackgroundScheduler(threading.Thread):
                         conn.close()
                 except Exception:
                     logger.exception("Scheduled ingest_pending failed")
+                # Cleanup expired rate-limit entries alongside ingest
+                _cleanup_rate_limit_store()
                 last_ingest = now
 
             if now - last_cleanup >= cleanup_interval:

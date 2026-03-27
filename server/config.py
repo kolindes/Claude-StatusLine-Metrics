@@ -31,5 +31,8 @@ PENDING_JSONL: str = os.environ.get(
     str(Path.home() / ".claude" / "metrics" / "pending.jsonl"),
 )
 
+# ── Time constants ───────────────────────────────────────────────────
+SECONDS_PER_DAY: int = 86400
+
 # ── Misc ─────────────────────────────────────────────────────────────
 VERSION: str = "1.0.0"

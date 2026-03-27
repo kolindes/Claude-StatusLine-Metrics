@@ -39,6 +39,9 @@ const API = {
   /** List all projects */
   projects: (account) => fetchJSON('/api/projects', { account }),
 
+  /** Aggregate summary across all projects */
+  allProjectsSummary: (params) => fetchJSON('/api/projects/summary-all', params),
+
   /** Single project summary (supports optional {from, to, account} params) */
   projectSummary: (id, params) => {
     if (typeof params === 'string') {

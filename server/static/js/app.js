@@ -132,6 +132,20 @@ function setText(sel, text) {
   if (el) el.textContent = text;
 }
 
+function clearChildren(el) {
+  while (el.firstChild) el.removeChild(el.firstChild);
+}
+
+function createEmptyRow(colSpan, message) {
+  var tr = document.createElement('tr');
+  var td = document.createElement('td');
+  td.colSpan = colSpan;
+  td.style.cssText = 'text-align:center;color:var(--text-muted);padding:24px';
+  td.textContent = message;
+  tr.appendChild(td);
+  return tr;
+}
+
 /* ── Animated Counter (P1) ───────────────────────────────────── */
 
 function animateValue(el, from, to, duration) {
@@ -307,7 +321,7 @@ function renderProjectList(projects) {
   if (!container) return;
 
   // Clear existing children
-  while (container.firstChild) container.removeChild(container.firstChild);
+  clearChildren(container);
 
   // "All Projects" item always first
   const allLink = document.createElement('a');
@@ -396,30 +410,18 @@ async function loadOverview() {
     timeseries = pResults[1];
     allSummaries = [projectSummary];
   } else if (state.projects.length > 0) {
-    // All Projects: aggregate summaries from every project
+    // All Projects: single aggregated summary query for KPIs
+    var summaryResult = await API.allProjectsSummary({ from: tr.from, to: tr.to }).catch(function() { return null; });
+    projectSummary = summaryResult || {
+      tokens_in: 0, tokens_out: 0, cache_write: 0, cache_read: 0,
+      total_tokens: 0, cost_usd: 0, duration_ms: 0, sessions: 0, avg_ctx_pct: 0,
+    };
+    // Per-project breakdown still needed for bar chart
     allSummaries = await Promise.all(
       state.projects.map(function(p) {
         return API.projectSummary(p.project_id, { from: tr.from, to: tr.to }).catch(function() { return null; });
       })
     );
-    projectSummary = {
-      tokens_in: 0, tokens_out: 0, cache_write: 0, cache_read: 0,
-      total_tokens: 0, cost_usd: 0, duration_ms: 0, sessions: 0, avg_ctx_pct: 0,
-    };
-    let ctxCount = 0;
-    allSummaries.forEach(function(s) {
-      if (!s) return;
-      projectSummary.tokens_in += s.tokens_in || 0;
-      projectSummary.tokens_out += s.tokens_out || 0;
-      projectSummary.cache_write += s.cache_write || 0;
-      projectSummary.cache_read += s.cache_read || 0;
-      projectSummary.total_tokens += s.total_tokens || 0;
-      projectSummary.cost_usd += s.cost_usd || 0;
-      projectSummary.duration_ms += s.duration_ms || 0;
-      projectSummary.sessions += s.sessions || 0;
-      if (s.avg_ctx_pct > 0) { projectSummary.avg_ctx_pct += s.avg_ctx_pct; ctxCount++; }
-    });
-    if (ctxCount > 0) projectSummary.avg_ctx_pct /= ctxCount;
 
     // Timeseries: aggregate across all projects (no project_id)
     timeseries = await API.metrics({
@@ -523,7 +525,7 @@ function updateKpiCards(summary, rateLimits, health) {
 function showError(containerId, msg) {
   const container = document.getElementById(containerId);
   if (!container) return;
-  while (container.firstChild) container.removeChild(container.firstChild);
+  clearChildren(container);
   const div = document.createElement('div');
   div.className = 'error-state';
   div.textContent = 'Failed to load data. ';
@@ -531,7 +533,7 @@ function showError(containerId, msg) {
   retry.className = 'retry-link';
   retry.textContent = 'Retry';
   retry.addEventListener('click', function() {
-    while (container.firstChild) container.removeChild(container.firstChild);
+    clearChildren(container);
     refreshData();
   });
   div.appendChild(retry);
@@ -624,18 +626,10 @@ function renderSessionsTable(sessions) {
   if (!tbody) return;
 
   // Clear existing rows
-  while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
+  clearChildren(tbody);
 
   if (!sessions || sessions.length === 0) {
-    const tr = document.createElement('tr');
-    const td = document.createElement('td');
-    td.colSpan = 5;
-    td.style.textAlign = 'center';
-    td.style.color = 'var(--text-muted)';
-    td.style.padding = '24px';
-    td.textContent = 'No sessions found';
-    tr.appendChild(td);
-    tbody.appendChild(tr);
+    tbody.appendChild(createEmptyRow(5, 'No sessions found'));
     return;
   }
 
@@ -885,18 +879,10 @@ function renderContextSessions(sessions) {
   const tbody = $('#ctx-sessions-tbody');
   if (!tbody) return;
 
-  while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
+  clearChildren(tbody);
 
   if (!sessions || sessions.length === 0) {
-    const row = document.createElement('tr');
-    const td = document.createElement('td');
-    td.colSpan = 10;
-    td.style.textAlign = 'center';
-    td.style.color = 'var(--text-muted)';
-    td.style.padding = '24px';
-    td.textContent = 'No sessions in selected period';
-    row.appendChild(td);
-    tbody.appendChild(row);
+    tbody.appendChild(createEmptyRow(10, 'No sessions in selected period'));
     return;
   }
 
@@ -1143,7 +1129,7 @@ async function loadGlobalStats() {
   const tbody = $('#global-projects-tbody');
   if (!tbody) return;
 
-  while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
+  clearChildren(tbody);
 
   // Use stats.projects if available, otherwise fall back to live project data
   const projects = stats.projects || [];
@@ -1168,15 +1154,7 @@ async function loadGlobalStats() {
   }
 
   if (projects.length === 0) {
-    const tr = document.createElement('tr');
-    const td = document.createElement('td');
-    td.colSpan = 5;
-    td.style.textAlign = 'center';
-    td.style.color = 'var(--text-muted)';
-    td.style.padding = '24px';
-    td.textContent = 'No project data yet';
-    tr.appendChild(td);
-    tbody.appendChild(tr);
+    tbody.appendChild(createEmptyRow(5, 'No project data yet'));
     return;
   }
 
