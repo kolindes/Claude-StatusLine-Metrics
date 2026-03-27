@@ -68,10 +68,22 @@ fi
 
 # ── 2. Python dependencies ──
 echo ""
-info "Installing Python dependencies..."
-python3 -m pip install -q --user -r "$SCRIPT_DIR/server/requirements.txt" 2>/dev/null \
-  || python3 -m pip install -q -r "$SCRIPT_DIR/server/requirements.txt" 2>&1 | tail -1
-ok "Python dependencies installed"
+# Check if already installed first
+if python3 -c "import flask; import waitress" 2>/dev/null; then
+  ok "Python dependencies (already installed)"
+else
+  info "Installing Python dependencies..."
+  if python3 -m pip install -q --user -r "$SCRIPT_DIR/server/requirements.txt" 2>/dev/null; then
+    ok "Python dependencies installed (--user)"
+  elif python3 -m pip install -q -r "$SCRIPT_DIR/server/requirements.txt" 2>/dev/null; then
+    ok "Python dependencies installed"
+  elif python3 -m pip install -q --break-system-packages -r "$SCRIPT_DIR/server/requirements.txt" 2>/dev/null; then
+    ok "Python dependencies installed (system)"
+  else
+    fail "Could not install Python dependencies. Try manually: pip install flask waitress"
+    exit 1
+  fi
+fi
 
 # ── 3. Vendor JS libraries ──
 echo ""
