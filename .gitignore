@@ -27,8 +27,14 @@ Thumbs.db
 # Playwright
 .playwright-mcp/
 
-# Screenshots (QA artifacts)
-*.png
+# Claude Code
+.claude/
 
-# Test artifacts
+# Screenshots & QA artifacts
+*.png
+*.jpg
 ctx-test-*.md
+
+# Logs
+*.log
+/tmp/
