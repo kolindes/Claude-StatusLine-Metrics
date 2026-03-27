@@ -1068,7 +1068,11 @@ def get_sessions(
              ORDER BY m.ts DESC LIMIT 1) AS last_ctx_size,
             (SELECT m.ctx_pct FROM metrics m
              WHERE m.session_id = s.session_id
-             ORDER BY m.ts DESC LIMIT 1) AS last_ctx_pct
+             ORDER BY m.ts DESC LIMIT 1) AS last_ctx_pct,
+            (SELECT COUNT(*) FROM (
+                SELECT ctx_pct, LAG(ctx_pct) OVER (ORDER BY ts) AS prev
+                FROM metrics m2 WHERE m2.session_id = s.session_id AND m2.ctx_pct > 0
+             ) WHERE prev - ctx_pct > 20) AS compressions
             {period_cols}
         FROM sessions s
         {period_join}

@@ -943,6 +943,7 @@ function renderContextSessions(sessions) {
         max_tokens_out: ((existing ? existing.max_tokens_out : 0) || 0) + (s.max_tokens_out || 0),
         max_cost_usd: ((existing ? existing.max_cost_usd : 0) || 0) + (s.max_cost_usd || 0),
         duration_seconds: ((existing ? existing.duration_seconds : 0) || 0) + (s.duration_seconds || 0),
+        compressions: ((existing ? existing.compressions : 0) || 0) + (s.compressions || 0),
       });
     } else {
       projMap[name]._session_count = (projMap[name]._session_count || 1) + 1;
@@ -950,6 +951,7 @@ function renderContextSessions(sessions) {
       projMap[name].max_tokens_out = (projMap[name].max_tokens_out || 0) + (s.max_tokens_out || 0);
       projMap[name].max_cost_usd = (projMap[name].max_cost_usd || 0) + (s.max_cost_usd || 0);
       projMap[name].duration_seconds = (projMap[name].duration_seconds || 0) + (s.duration_seconds || 0);
+      projMap[name].compressions = (projMap[name].compressions || 0) + (s.compressions || 0);
       // Keep higher last_seen_at
       if ((s.last_seen_at || 0) > (projMap[name].last_seen_at || 0)) {
         projMap[name].last_seen_at = s.last_seen_at;
@@ -1054,6 +1056,14 @@ function renderContextSessions(sessions) {
     } else {
       tdTrend.textContent = '→ low';
       tdTrend.style.color = 'var(--green)';
+    }
+    // Append compression count if any
+    const comp = s.compressions || 0;
+    if (comp > 0) {
+      const compSpan = document.createElement('span');
+      compSpan.style.cssText = 'margin-left:6px;font-size:0.6rem;color:var(--amber);opacity:0.8';
+      compSpan.textContent = comp + '×↓';
+      tdTrend.appendChild(compSpan);
     }
     tr.appendChild(tdTrend);
 
