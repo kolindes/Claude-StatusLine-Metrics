@@ -21,6 +21,8 @@ const state = {
   pendingRefresh: false,
 };
 
+const GITHUB_REPO = 'kolindes/Claude-StatusLine-Metrics';
+
 /* ── Time Range Definitions (seconds) ─────────────────────────── */
 
 const TIME_RANGES = {
@@ -30,6 +32,14 @@ const TIME_RANGES = {
   '7d':  604800,
   '30d': 2592000,
 };
+
+/* ── Count Formatter (stars, etc.) ────────────────────────────── */
+
+function fmtCount(n) {
+  if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+  if (n >= 1000) return (n / 1000).toFixed(1) + 'k';
+  return String(n);
+}
 
 /* ── Formatting Helpers ───────────────────────────────────────── */
 
@@ -1399,15 +1409,29 @@ async function init() {
     }
   }).catch(function() {});
 
-  // Fetch GitHub stars (non-blocking, best-effort)
-  fetch('https://api.github.com/repos/kolindes/Claude-StatusLine-Metrics', { signal: AbortSignal.timeout(5000) })
-    .then(function(r) { return r.json(); })
-    .then(function(d) {
-      if (d && typeof d.stargazers_count === 'number') {
-        const el = document.getElementById('github-stars-count');
-        if (el) el.textContent = String(d.stargazers_count);
-      }
-    }).catch(function() {});
+  // Fetch GitHub stars (non-blocking, best-effort, 5-min localStorage cache)
+  var cached = localStorage.getItem('sm_gh_stars');
+  var cacheTs = parseInt(localStorage.getItem('sm_gh_stars_ts') || '0');
+  if (cached && Date.now() - cacheTs < 300000) {
+    var el = document.getElementById('github-stars-count');
+    if (el) el.textContent = cached;
+  } else {
+    var ctrl = new AbortController();
+    var tid = setTimeout(function() { ctrl.abort(); }, 5000);
+    fetch('https://api.github.com/repos/' + GITHUB_REPO, { signal: ctrl.signal })
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (d && typeof d.stargazers_count === 'number') {
+          var el = document.getElementById('github-stars-count');
+          var formatted = fmtCount(d.stargazers_count);
+          if (el) el.textContent = formatted;
+          localStorage.setItem('sm_gh_stars', formatted);
+          localStorage.setItem('sm_gh_stars_ts', String(Date.now()));
+        }
+      })
+      .catch(function() {})
+      .finally(function() { clearTimeout(tid); });
+  }
 }
 
 // Wait for DOM and Chart.js

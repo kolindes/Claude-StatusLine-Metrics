@@ -30,8 +30,9 @@ Thumbs.db
 # Claude Code
 .claude/
 
-# Screenshots & QA artifacts
+# Screenshots tracked in screenshots/ dir, other PNGs ignored
 *.png
+!screenshots/*.png
 *.jpg
 ctx-test-*.md
 

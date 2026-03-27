@@ -351,6 +351,16 @@ statusline-metrics/
 └── install.sh                 # Setup script (vendor libs + dirs)
 ```
 
+## Screenshots
+
+| Overview | Rate Limits |
+|----------|-------------|
+| ![Overview](screenshots/overview.png) | ![Rate Limits](screenshots/ratelimits.png) |
+
+| Context Window | Global Statistics |
+|----------------|-------------------|
+| ![Context](screenshots/context.png) | ![Global Stats](screenshots/globalstats.png) |
+
 ## Dashboard
 
 Dashboard: `http://<server-ip>:9177/`
