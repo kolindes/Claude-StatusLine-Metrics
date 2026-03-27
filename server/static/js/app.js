@@ -645,35 +645,57 @@ function renderSessionsTable(sessions) {
     return;
   }
 
+  // Group sessions by project_name
   const nowTs = Math.floor(Date.now() / 1000);
+  const grouped = {};
   sessions.forEach(function(s) {
+    const name = s.project_name || 'unknown';
+    if (!grouped[name]) {
+      grouped[name] = { project_name: name, model: s.model, sessions: 0, duration: 0, tokens: 0, cost: 0, last_seen_at: 0, has_active: false };
+    }
+    const g = grouped[name];
+    g.sessions++;
+    g.duration += s.duration_seconds || 0;
+    g.tokens += (s.max_tokens_in || 0) + (s.max_tokens_out || 0);
+    g.cost += s.max_cost_usd || 0;
+    if (s.last_seen_at > g.last_seen_at) { g.last_seen_at = s.last_seen_at; g.model = s.model; }
+    const seenDiff = s.last_seen_at ? (nowTs - s.last_seen_at) : Infinity;
+    if (seenDiff < 300) g.has_active = true;
+  });
+
+  // Sort by cost descending
+  const projects = Object.values(grouped);
+  projects.sort(function(a, b) { return b.cost - a.cost; });
+
+  projects.forEach(function(p) {
     const tr = document.createElement('tr');
 
     const tdProj = document.createElement('td');
     const dot = document.createElement('span');
-    const seenDiff = s.last_seen_at ? (nowTs - s.last_seen_at) : Infinity;
-    dot.className = 'status-dot ' + (seenDiff < 300 ? 'active' : 'idle');
+    dot.className = 'status-dot ' + (p.has_active ? 'active' : 'idle');
     tdProj.appendChild(dot);
-    tdProj.appendChild(document.createTextNode(truncate(s.project_name, 20)));
+    let label = truncate(p.project_name, 20);
+    if (p.sessions > 1) label += ' (' + p.sessions + ')';
+    tdProj.appendChild(document.createTextNode(label));
     tr.appendChild(tdProj);
 
     const tdModel = document.createElement('td');
-    tdModel.textContent = s.model || '--';
+    tdModel.textContent = p.model || '--';
     tr.appendChild(tdModel);
 
     const tdDur = document.createElement('td');
     tdDur.className = 'cell-right';
-    tdDur.textContent = fmtDur(s.duration_seconds, 's');
+    tdDur.textContent = fmtDur(p.duration, 's');
     tr.appendChild(tdDur);
 
     const tdTok = document.createElement('td');
     tdTok.className = 'cell-right';
-    tdTok.textContent = fmtTokens((s.max_tokens_in || 0) + (s.max_tokens_out || 0));
+    tdTok.textContent = fmtTokens(p.tokens);
     tr.appendChild(tdTok);
 
     const tdCost = document.createElement('td');
     tdCost.className = 'cell-right';
-    tdCost.textContent = fmtCost(s.max_cost_usd);
+    tdCost.textContent = fmtCost(p.cost);
     tr.appendChild(tdCost);
 
     tbody.appendChild(tr);
@@ -690,7 +712,7 @@ function renderSessionsTable(sessions) {
   tfoot.className = 'sessions-total';
   const tfLabel = document.createElement('td');
   tfLabel.colSpan = 2;
-  tfLabel.textContent = 'TOTAL (' + plural(sessions.length, 'session', 'sessions') + ')';
+  tfLabel.textContent = 'TOTAL (' + plural(sessions.length, 'session', 'sessions') + ', ' + projects.length + ' projects)';
   tfoot.appendChild(tfLabel);
   const tfDur = document.createElement('td');
   tfDur.className = 'cell-right';
