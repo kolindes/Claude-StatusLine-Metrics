@@ -239,6 +239,11 @@ def init_db(conn: sqlite3.Connection | None = None) -> sqlite3.Connection:
             import shutil
 
             shutil.move(str(db_path), str(backup_path))
+            # Also remove WAL and SHM files from corrupted DB
+            for suffix in ["-wal", "-shm"]:
+                wal_path = db_path.with_name(db_path.name + suffix)
+                if wal_path.exists():
+                    wal_path.unlink()
             logger.warning(
                 "Corrupted DB backed up to %s, creating fresh DB", backup_path
             )
@@ -461,7 +466,7 @@ def cleanup(conn: sqlite3.Connection) -> int:
             project_path        = excluded.project_path,
             first_seen          = MIN(COALESCE(global_stats.first_seen, excluded.first_seen), excluded.first_seen),
             last_seen           = MAX(COALESCE(global_stats.last_seen, excluded.last_seen), excluded.last_seen),
-            total_sessions      = global_stats.total_sessions      + excluded.total_sessions,
+            -- total_sessions: not updated here; computed dynamically in get_global_stats
             total_tokens_in     = global_stats.total_tokens_in     + excluded.total_tokens_in,
             total_tokens_out    = global_stats.total_tokens_out    + excluded.total_tokens_out,
             total_cache_write   = global_stats.total_cache_write   + excluded.total_cache_write,
@@ -993,7 +998,7 @@ def get_global_stats(
         "total_cache_read": hist.get("hist_cache_read", 0) + live.get("live_cache_read", 0),
         "total_cost_usd": hist.get("hist_cost", 0) + live.get("live_cost", 0),
         "total_duration_ms": hist.get("hist_duration", 0) + live.get("live_duration", 0),
-        "total_sessions": hist.get("hist_sessions", 0) + live.get("live_sessions", 0),
+        "total_sessions": conn.execute("SELECT COUNT(*) FROM sessions").fetchone()[0],
         "total_lines_added": hist.get("hist_lines_added", 0) + live.get("live_lines_added", 0),
         "total_lines_removed": hist.get("hist_lines_removed", 0) + live.get("live_lines_removed", 0),
         "first_seen": first_seen,

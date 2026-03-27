@@ -148,6 +148,8 @@ function createEmptyRow(colSpan, message) {
 
 function animateValue(el, from, to, duration) {
   if (!el || from === to) return;
+  // Cancel previous animation on this element
+  if (el._animFrame) cancelAnimationFrame(el._animFrame);
   duration = duration || 600;
   const start = performance.now();
   const fmt = el.dataset.format || 'tokens';
@@ -158,9 +160,10 @@ function animateValue(el, from, to, duration) {
     if (fmt === 'pct') el.textContent = fmtPct(current);
     else if (fmt === 'int') el.textContent = String(Math.round(current));
     else el.textContent = fmtTokens(current);
-    if (progress < 1) requestAnimationFrame(step);
+    if (progress < 1) el._animFrame = requestAnimationFrame(step);
+    else el._animFrame = null;
   }
-  requestAnimationFrame(step);
+  el._animFrame = requestAnimationFrame(step);
 }
 
 function setKpiValue(sel, rawValue, formatType) {
@@ -605,8 +608,14 @@ function updateProjectsBarChart(summaries, projectsList) {
   // Sort by tokens descending
   const indices = data.map(function(_, i) { return i; });
   indices.sort(function(a, b) { return data[b] - data[a]; });
-  const sortedLabels = indices.map(function(i) { return labels[i]; });
-  const sortedData = indices.map(function(i) { return data[i]; });
+  var sortedLabels = indices.map(function(i) { return labels[i]; });
+  var sortedData = indices.map(function(i) { return data[i]; });
+
+  // Limit to top 15 projects for readability
+  if (sortedLabels.length > 15) {
+    sortedLabels = sortedLabels.slice(0, 15);
+    sortedData = sortedData.slice(0, 15);
+  }
 
   const empty = sortedData.length === 0;
   setChartEmpty('chart-breakdown', empty);
@@ -1258,6 +1267,8 @@ async function refreshData() {
   state.isRefreshing = true;
   state.pendingRefresh = false;
   resetRefreshRing();
+  // Clear error banners from all pages on retry / auto-refresh
+  document.querySelectorAll('.error-state').forEach(function(el) { el.remove(); });
   const mainArea = $('.main-area');
   if (mainArea) mainArea.classList.add('loading');
   try {

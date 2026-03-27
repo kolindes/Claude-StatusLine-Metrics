@@ -77,7 +77,18 @@ def ingest_pending(conn: sqlite3.Connection) -> int:
         if ingested:
             conn.commit()
     except OSError as exc:
-        logger.error("Failed to read pending.jsonl: %s", exc)
+        logger.error("Error during ingest: %s", exc)
+        # Rollback uncommitted records
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        # Restore .processing back to .jsonl so data isn't lost
+        try:
+            processing_path.rename(path)
+            logger.warning("Restored %s back to %s for retry", processing_path.name, path.name)
+        except OSError:
+            pass
         return 0
 
     # Remove the processing file after successful ingestion
