@@ -930,10 +930,38 @@ function renderContextSessions(sessions) {
     return;
   }
 
-  // Sort by used% descending — hottest sessions first
-  sessions.sort(function(a, b) { return (b.last_ctx_pct || 0) - (a.last_ctx_pct || 0); });
-
+  // Group by project: keep the session with highest ctx% per project, sum metrics
+  const projMap = {};
   sessions.forEach(function(s) {
+    const name = s.project_name || 'unknown';
+    const existing = projMap[name];
+    if (!existing || (s.last_ctx_pct || 0) > (existing.last_ctx_pct || 0)) {
+      // Keep the session with highest context as the "representative"
+      projMap[name] = Object.assign({}, s, {
+        _session_count: (existing ? existing._session_count : 0) + 1,
+        max_tokens_in: ((existing ? existing.max_tokens_in : 0) || 0) + (s.max_tokens_in || 0),
+        max_tokens_out: ((existing ? existing.max_tokens_out : 0) || 0) + (s.max_tokens_out || 0),
+        max_cost_usd: ((existing ? existing.max_cost_usd : 0) || 0) + (s.max_cost_usd || 0),
+        duration_seconds: ((existing ? existing.duration_seconds : 0) || 0) + (s.duration_seconds || 0),
+      });
+    } else {
+      projMap[name]._session_count = (projMap[name]._session_count || 1) + 1;
+      projMap[name].max_tokens_in = (projMap[name].max_tokens_in || 0) + (s.max_tokens_in || 0);
+      projMap[name].max_tokens_out = (projMap[name].max_tokens_out || 0) + (s.max_tokens_out || 0);
+      projMap[name].max_cost_usd = (projMap[name].max_cost_usd || 0) + (s.max_cost_usd || 0);
+      projMap[name].duration_seconds = (projMap[name].duration_seconds || 0) + (s.duration_seconds || 0);
+      // Keep higher last_seen_at
+      if ((s.last_seen_at || 0) > (projMap[name].last_seen_at || 0)) {
+        projMap[name].last_seen_at = s.last_seen_at;
+      }
+    }
+  });
+  const grouped = Object.values(projMap);
+
+  // Sort by used% descending — hottest projects first
+  grouped.sort(function(a, b) { return (b.last_ctx_pct || 0) - (a.last_ctx_pct || 0); });
+
+  grouped.forEach(function(s) {
     const ctxPct = s.last_ctx_pct || 0;
     const ctxSize = s.last_ctx_size || 0;
     const remaining = ctxSize > 0 ? Math.round(ctxSize * (100 - ctxPct) / 100) : 0;
@@ -949,7 +977,9 @@ function renderContextSessions(sessions) {
     dotSpan.style.cssText = 'display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:6px;vertical-align:middle;background:' + (isActive ? 'var(--green, #4ade80)' : 'var(--text-muted, #666)');
     tdProj.appendChild(dotSpan);
     const nameSpan = document.createElement('span');
-    nameSpan.textContent = truncate(s.project_name, 20);
+    let projLabel = truncate(s.project_name, 20);
+    if (s._session_count > 1) projLabel += ' (' + s._session_count + ')';
+    nameSpan.textContent = projLabel;
     nameSpan.title = s.project_name || '';
     tdProj.appendChild(nameSpan);
     tr.appendChild(tdProj);
@@ -1086,7 +1116,7 @@ function renderContextSessions(sessions) {
   // Project
   const tfLabel = document.createElement('td');
   tfLabel.colSpan = 4;
-  tfLabel.textContent = 'TOTAL (' + plural(sessions.length, 'session', 'sessions') + ')';
+  tfLabel.textContent = 'TOTAL (' + plural(sessions.length, 'session', 'sessions') + ', ' + grouped.length + ' projects)';
   tfoot.appendChild(tfLabel);
   // Trend (skip)
   const tfTrend = document.createElement('td');
