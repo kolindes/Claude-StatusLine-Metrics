@@ -539,7 +539,7 @@ function showError(containerId, msg) {
 }
 
 function setChartEmpty(canvasId, empty) {
-  const container = document.getElementById(canvasId);
+  let container = document.getElementById(canvasId);
   if (!container) return;
   container = container.closest('.chart-container');
   if (!container) return;
@@ -1124,7 +1124,7 @@ async function loadGlobalStats() {
   setText('#gs-lines-added', '+' + fmtTokens(stats.total_lines_added));
   setText('#gs-lines-removed', '-' + fmtTokens(stats.total_lines_removed));
   const linesCard = document.getElementById('gs-lines-added');
-  if (linesCard) { var card = linesCard.closest('.stat-card'); if (card) card.style.borderLeft = '2px solid rgba(255,140,0,0.3)'; }
+  if (linesCard) { const card = linesCard.closest('.stat-card'); if (card) card.style.borderLeft = '2px solid rgba(255,140,0,0.3)'; }
 
   const elFirst = $('#gs-first-seen');
   if (elFirst) elFirst.className = 'stat-value accent-green';
