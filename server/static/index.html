@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0a0e17">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='12' fill='%230a0e17'/><polygon points='50,15 85,80 15,80' fill='none' stroke='%23ff8c00' stroke-width='4'/><circle cx='50' cy='55' r='12' fill='%23ff8c00' opacity='0.6'/></svg>">
+  <title>Statusline Metrics</title>
+  <link rel="stylesheet" href="/static/css/dashboard.css">
+</head>
+<body>
+
+  <!-- Burger menu toggle (tablet/mobile) -->
+  <button class="nav-toggle" aria-label="Toggle navigation">&#9776;</button>
+  <div class="sidebar-overlay"></div>
+
+  <div class="dashboard-grid">
+
+    <!-- ═══ Sidebar ═══════════════════════════════════════════ -->
+    <aside class="sidebar">
+      <div class="sidebar-logo">
+        <h1>STATUSLINE</h1>
+      </div>
+
+      <nav class="sidebar-nav">
+        <a data-page="overview" data-shortcut="1" class="active">Overview</a>
+        <a data-page="ratelimits" data-shortcut="2">Rate Limits</a>
+        <a data-page="context" data-shortcut="3">Context</a>
+        <a data-page="global" data-shortcut="4">Global Stats</a>
+      </nav>
+
+      <div class="sidebar-projects">
+        <div class="sidebar-projects-title">Projects</div>
+        <div id="project-list">
+          <div class="empty-state" style="padding:16px">
+            <div class="empty-desc">Loading...</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sidebar-footer">v1.0.0</div>
+    </aside>
+
+    <!-- ═══ Main Area ═════════════════════════════════════════ -->
+    <main class="main-area">
+
+      <!-- Time Filter Bar -->
+      <div class="time-filter-bar">
+        <button data-range="1h">1h</button>
+        <button data-range="6h">6h</button>
+        <button data-range="1d" class="active">1d</button>
+        <button data-range="7d">7d</button>
+        <button data-range="30d">30d</button>
+        <div class="spacer"></div>
+        <span class="last-update"></span>
+        <svg class="refresh-ring" viewBox="0 0 20 20">
+          <circle cx="10" cy="10" r="8" fill="none" stroke="var(--border)" stroke-width="1"/>
+          <circle cx="10" cy="10" r="8" fill="none" stroke="var(--cyan)" stroke-width="1.5"
+            stroke-dasharray="50.27" stroke-dashoffset="50.27" class="refresh-progress"/>
+        </svg>
+      </div>
+
+      <h2 class="page-title" id="page-title">Overview</h2>
+      <p class="page-subtitle" id="page-subtitle"></p>
+
+      <!-- ─── Page: Overview ─────────────────────────────────── -->
+      <section id="page-overview" class="page-section active">
+
+        <!-- KPI Cards -->
+        <div class="kpi-row">
+          <div class="kpi-card">
+            <div class="kpi-label">Total Tokens</div>
+            <div class="kpi-value accent-blue" id="kpi-tokens-value">0</div>
+            <div class="kpi-detail" id="kpi-tokens-detail">In: 0 / Out: 0</div>
+            <div class="kpi-trend neutral" id="kpi-tokens-trend"></div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Cache</div>
+            <div class="kpi-value accent-green" id="kpi-cache-value">0</div>
+            <div class="kpi-detail" id="kpi-cache-detail">W: 0 / R: 0</div>
+            <div class="kpi-trend neutral" id="kpi-cache-trend"></div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Rate 5h</div>
+            <div class="kpi-value" id="kpi-rate5h-value">0%</div>
+            <div class="kpi-detail" id="kpi-rate5h-detail">--</div>
+            <div class="kpi-trend neutral" id="kpi-rate5h-trend"></div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Rate 7d</div>
+            <div class="kpi-value accent-purple" id="kpi-rate7d-value">0%</div>
+            <div class="kpi-detail" id="kpi-rate7d-detail">--</div>
+            <div class="kpi-trend neutral" id="kpi-rate7d-trend"></div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Context</div>
+            <div class="kpi-value accent-yellow" id="kpi-context-value">0%</div>
+            <div class="kpi-detail" id="kpi-context-detail">--</div>
+            <div class="kpi-trend neutral" id="kpi-context-trend"></div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Active Sessions</div>
+            <div class="kpi-value" id="kpi-active-value">0</div>
+            <div class="kpi-detail" id="kpi-active-detail">--</div>
+            <div class="kpi-trend neutral" id="kpi-active-trend"></div>
+          </div>
+        </div>
+
+        <!-- Main Chart: Tokens Timeline -->
+        <div class="chart-section">
+          <div class="chart-container">
+            <div class="chart-title" id="tokens-chart-title">Tokens Timeline</div>
+            <canvas id="chart-tokens"></canvas>
+            <div class="chart-legend-inline">
+              <span class="legend-item" style="color:#ff8c00"><span class="legend-dot" style="background:#ff8c00"></span>Tokens In</span>
+              <span class="legend-item" style="color:#4ade80"><span class="legend-dot" style="background:#4ade80"></span>Tokens Out</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bottom Row: Breakdown + Sessions -->
+        <div class="charts-row">
+          <div class="chart-container chart-bar-projects">
+            <div class="chart-title">Tokens per Project</div>
+            <canvas id="chart-breakdown"></canvas>
+          </div>
+          <div class="table-container">
+            <div class="table-title" id="sessions-title">Sessions</div>
+            <div style="overflow-x:auto">
+              <table class="sessions-table">
+                <thead>
+                  <tr>
+                    <th>Project</th>
+                    <th>Model</th>
+                    <th class="cell-right">Duration</th>
+                    <th class="cell-right">Tokens</th>
+                    <th class="cell-right">Cost</th>
+                  </tr>
+                </thead>
+                <tbody id="sessions-tbody">
+                  <tr>
+                    <td colspan="6" style="text-align:center;color:var(--text-muted);padding:24px">Loading...</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ─── Page: Rate Limits ──────────────────────────────── -->
+      <section id="page-ratelimits" class="page-section">
+
+        <!-- Current Status -->
+        <div class="kpi-row" style="margin-bottom:24px;grid-template-columns:1fr 1fr">
+          <div class="kpi-card" style="padding:24px 28px">
+            <div class="kpi-label" style="font-size:0.8rem;margin-bottom:12px">5-HOUR LIMIT</div>
+            <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:12px">
+              <div class="kpi-value" id="rl-5h-value" style="font-size:2.2rem;margin:0">0%</div>
+              <div id="rl-5h-tokens" style="font-size:0.85rem;color:var(--cyan);font-family:var(--font-mono)"></div>
+            </div>
+            <div class="progress-bar" style="height:10px;margin-bottom:10px">
+              <div class="progress-fill" id="rl-5h-fill" style="width:0%"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:0.78rem;font-family:var(--font-mono)">
+              <span id="rl-5h-reset" style="color:var(--text-secondary)">--</span>
+              <span id="rl-5h-remaining" style="color:var(--green)"></span>
+            </div>
+          </div>
+          <div class="kpi-card" style="padding:24px 28px">
+            <div class="kpi-label" style="font-size:0.8rem;margin-bottom:12px">7-DAY LIMIT</div>
+            <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:12px">
+              <div class="kpi-value" id="rl-7d-value" style="font-size:2.2rem;margin:0">0%</div>
+              <div id="rl-7d-tokens" style="font-size:0.85rem;color:var(--cyan);font-family:var(--font-mono)"></div>
+            </div>
+            <div class="progress-bar" style="height:10px;margin-bottom:10px">
+              <div class="progress-fill" id="rl-7d-fill" style="width:0%"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:0.78rem;font-family:var(--font-mono)">
+              <span id="rl-7d-reset" style="color:var(--text-secondary)">--</span>
+              <span id="rl-7d-remaining" style="color:var(--green)"></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Token Budget Estimates -->
+        <div class="stats-grid" id="rl-estimates-section" style="display:none">
+          <div class="stat-card">
+            <div class="stat-label">5H TOKEN BUDGET (100%)</div>
+            <div class="stat-value accent-yellow" id="rl-est-5h-avg">--</div>
+            <div class="stat-sub" id="rl-est-5h-range">min / max</div>
+            <div class="stat-sub" id="rl-est-5h-samples">-- samples</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">7D TOKEN BUDGET (100%)</div>
+            <div class="stat-value accent-blue" id="rl-est-7d-avg">--</div>
+            <div class="stat-sub" id="rl-est-7d-range">min / max</div>
+            <div class="stat-sub" id="rl-est-7d-samples">-- samples</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">5H TIME TO LIMIT <span style="font-weight:400;opacity:0.5">(approx)</span></div>
+            <div class="stat-value accent-red" id="rl-pred-5h">--</div>
+            <div class="stat-sub" id="rl-pred-5h-rate">--</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">7D TIME TO LIMIT <span style="font-weight:400;opacity:0.5">(approx)</span></div>
+            <div class="stat-value accent-red" id="rl-pred-7d">--</div>
+            <div class="stat-sub" id="rl-pred-7d-rate">--</div>
+          </div>
+        </div>
+
+        <!-- History Chart -->
+        <div class="chart-section">
+          <div class="chart-container">
+            <div class="chart-title">Rate Limit Usage Over Time (% consumed)</div>
+            <canvas id="chart-ratelimits"></canvas>
+            <div class="chart-legend-inline">
+              <span class="legend-item" style="color:#ff8c00"><span class="legend-dot" style="background:#ff8c00"></span>5-Hour Limit</span>
+              <span class="legend-item" style="color:#4ade80"><span class="legend-dot" style="background:#4ade80"></span>7-Day Limit</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ─── Page: Context Window ───────────────────────────── -->
+      <section id="page-context" class="page-section">
+
+        <!-- KPI Row: 2 cards -->
+        <div class="kpi-row" style="grid-template-columns: 1fr 1fr">
+          <div class="kpi-card">
+            <div class="kpi-label">Compressions</div>
+            <div class="kpi-value accent-yellow" id="ctx-compressions">0</div>
+            <div class="kpi-detail" id="ctx-compressions-detail">No compressions detected</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Avg Context Usage</div>
+            <div class="kpi-value accent-green" id="ctx-avg-pct">0%</div>
+            <div class="kpi-detail" id="ctx-avg-detail">--</div>
+          </div>
+        </div>
+
+        <!-- Session Context Table -->
+        <div class="table-container">
+          <div class="table-title">Session Context Status</div>
+          <div style="overflow-x:auto">
+            <table class="sessions-table" id="ctx-sessions-table">
+              <thead>
+                <tr>
+                  <th>Project</th>
+                  <th>Model</th>
+                  <th>Window</th>
+                  <th>Context Used</th>
+                  <th>Trend</th>
+                  <th class="cell-right">Remaining</th>
+                  <th class="cell-right">Tokens</th>
+                  <th class="cell-right">Cost</th>
+                  <th class="cell-right">Duration</th>
+                  <th class="cell-right">Last Seen</th>
+                </tr>
+              </thead>
+              <tbody id="ctx-sessions-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ─── Page: Global Stats ─────────────────────────────── -->
+      <section id="page-global" class="page-section">
+
+        <!-- All-time counters -->
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-label">Total Tokens</div>
+            <div class="stat-value" id="gs-total-tokens">0</div>
+            <div class="stat-sub">In: <span id="gs-tokens-in">0</span> / Out: <span id="gs-tokens-out">0</span></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Total Cache</div>
+            <div class="stat-value" id="gs-cache-total">0</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Total Cost</div>
+            <div class="stat-value" id="gs-total-cost">$0.00</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Total Duration</div>
+            <div class="stat-value" id="gs-total-duration">0m</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Total Sessions</div>
+            <div class="stat-value" id="gs-total-sessions">0</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Lines Changed</div>
+            <div class="stat-value" style="font-size:1.1rem">
+              <span style="color:var(--green);text-shadow:0 0 8px rgba(74,222,128,0.3)" id="gs-lines-added">+0</span>
+              <span style="color:var(--text-muted)">/</span>
+              <span style="color:var(--red);text-shadow:0 0 8px rgba(239,100,97,0.3)" id="gs-lines-removed">-0</span>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">First Seen</div>
+            <div class="stat-value" style="font-size:0.9rem" id="gs-first-seen">--</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Last Active</div>
+            <div class="stat-value" style="font-size:0.9rem" id="gs-last-seen">--</div>
+          </div>
+        </div>
+
+        <!-- Per-project table -->
+        <div class="table-container">
+          <div class="table-title">Per-Project Lifetime Stats</div>
+          <div style="overflow-x:auto">
+            <table class="sessions-table">
+              <thead>
+                <tr>
+                  <th>Project</th>
+                  <th class="cell-right">Tokens</th>
+                  <th class="cell-right">Cost</th>
+                  <th class="cell-right">Sessions</th>
+                  <th class="cell-right">Last Active</th>
+                </tr>
+              </thead>
+              <tbody id="global-projects-tbody">
+                <tr>
+                  <td colspan="5" style="text-align:center;color:var(--text-muted);padding:24px">Loading...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="global-stats-footer" style="text-align:center;padding:24px 0 8px;font-family:var(--font-mono);font-size:0.65rem;color:var(--text-muted);letter-spacing:0.06em">Data accumulates over time</div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- ═══ Scripts ═══════════════════════════════════════════════ -->
+  <!-- Chart.js: try local vendor first, CDN fallback -->
+  <script src="/static/vendor/chart.js"
+          onerror="var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js';document.head.appendChild(s);">
+  </script>
+  <script src="/static/js/api.js"></script>
+  <script src="/static/js/charts.js"></script>
+  <script src="/static/js/app.js"></script>
+</body>
+</html>

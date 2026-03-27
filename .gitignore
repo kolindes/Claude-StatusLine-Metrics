@@ -1,0 +1,34 @@
+# Internal docs (research, team prompts)
+docs/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.venv/
+
+# Database
+*.db
+*.db-wal
+*.db-shm
+
+# Metrics data
+pending.jsonl
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Playwright
+.playwright-mcp/
+
+# Screenshots (QA artifacts)
+*.png
+
+# Test artifacts
+ctx-test-*.md
