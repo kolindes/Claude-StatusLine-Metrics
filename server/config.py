@@ -35,4 +35,4 @@ PENDING_JSONL: str = os.environ.get(
 SECONDS_PER_DAY: int = 86400
 
 # ── Misc ─────────────────────────────────────────────────────────────
-VERSION: str = "1.0.0"
+VERSION: str = "1.1.0"
