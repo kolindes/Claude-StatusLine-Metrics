@@ -2,13 +2,13 @@
 set -euo pipefail
 
 # Statusline Metrics — Installer
-# Проверяет зависимости, устанавливает vendor-библиотеки, создаёт директории.
+# Checks dependencies, downloads vendor JS, creates directories.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VENDOR_DIR="$SCRIPT_DIR/server/static/vendor"
 METRICS_DIR="$HOME/.claude/metrics"
 
-# ── Цвета ──
+# ── Colors ──
 RED=$'\033[31m'; GREEN=$'\033[32m'; YELLOW=$'\033[33m'; DIM=$'\033[2m'; RESET=$'\033[0m'
 ok()   { printf "${GREEN}OK${RESET}  %s\n" "$1"; }
 fail() { printf "${RED}FAIL${RESET}  %s\n" "$1"; }
@@ -20,7 +20,7 @@ echo "  Statusline Metrics — Install"
 echo "  ────────────────────────────"
 echo ""
 
-# ── 1. Проверка зависимостей ──
+# ── 1. Check dependencies ──
 errors=0
 
 # Python 3
@@ -29,11 +29,11 @@ if command -v python3 &>/dev/null; then
   if python3 -c "import sys; sys.exit(0 if sys.version_info >= (3,9) else 1)" 2>/dev/null; then
     ok "Python $py_ver (>= 3.9)"
   else
-    fail "Python $py_ver — нужен 3.9+. Обновите Python."
+    fail "Python $py_ver is too old. Need 3.9+."
     errors=$((errors + 1))
   fi
 else
-  fail "Python 3 не найден. Установите: https://www.python.org/downloads/"
+  fail "Python 3 not found. Install: https://www.python.org/downloads/"
   errors=$((errors + 1))
 fi
 
@@ -41,7 +41,7 @@ fi
 if python3 -m pip --version &>/dev/null 2>&1; then
   ok "pip"
 else
-  fail "pip не найден. Установите: python3 -m ensurepip"
+  fail "pip not found. Run: python3 -m ensurepip"
   errors=$((errors + 1))
 fi
 
@@ -49,7 +49,7 @@ fi
 if command -v curl &>/dev/null; then
   ok "curl"
 else
-  fail "curl не найден"
+  fail "curl not found"
   errors=$((errors + 1))
 fi
 
@@ -57,25 +57,25 @@ fi
 if command -v jq &>/dev/null; then
   ok "jq"
 else
-  warn "jq не найден (нужен для statusline.sh, не для сервера)"
+  warn "jq not found (needed for statusline.sh, not the server)"
 fi
 
 if (( errors > 0 )); then
   echo ""
-  fail "Исправьте ошибки выше и повторите."
+  fail "Fix the errors above and try again."
   exit 1
 fi
 
-# ── 2. Python зависимости ──
+# ── 2. Python dependencies ──
 echo ""
-info "Устанавливаю Python-зависимости..."
+info "Installing Python dependencies..."
 python3 -m pip install -q --user -r "$SCRIPT_DIR/server/requirements.txt" 2>/dev/null \
   || python3 -m pip install -q -r "$SCRIPT_DIR/server/requirements.txt" 2>&1 | tail -1
-ok "Python-зависимости установлены"
+ok "Python dependencies installed"
 
-# ── 3. Vendor JS-библиотеки ──
+# ── 3. Vendor JS libraries ──
 echo ""
-info "Скачиваю JS-библиотеки для дашборда..."
+info "Downloading JS libraries for the dashboard..."
 mkdir -p "$VENDOR_DIR"
 
 CJS_URL="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"
@@ -83,34 +83,35 @@ CJS_URL="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"
 if [[ ! -f "$VENDOR_DIR/chart.js" ]]; then
   curl -sL -o "$VENDOR_DIR/chart.js" "$CJS_URL" && \
     ok "chart.js 4.4.7 ($(wc -c < "$VENDOR_DIR/chart.js" | tr -d ' ') bytes)" || \
-    warn "Не удалось скачать chart.js (можно позже)"
+    warn "Failed to download chart.js (CDN fallback will be used)"
 else
-  ok "chart.js (уже есть)"
+  ok "chart.js (already present)"
 fi
 
-# ── 4. Проверка порта ──
+# ── 4. Check port ──
 echo ""
 if (ss -tlnp 2>/dev/null || lsof -iTCP:9177 -sTCP:LISTEN 2>/dev/null) | grep -q '9177'; then
-  warn "Порт 9177 уже занят. Остановите процесс или измените METRICS_PORT."
+  warn "Port 9177 is already in use. Stop the existing process or change METRICS_PORT."
 fi
 
-# ── 5. Директории ──
+# ── 5. Create directories ──
 echo ""
 mkdir -p "$METRICS_DIR"
-ok "Директория метрик: $METRICS_DIR"
+ok "Metrics directory: $METRICS_DIR"
 
-# ── 6. Автозапуск (systemd) ──
-echo ""
-read -p "  Настроить автозапуск (systemd)? [y/N] " -n 1 -r
-echo
-if [[ $REPLY =~ ^[Yy]$ ]]; then
-  read -p "  Bind на все интерфейсы (0.0.0.0) для LAN доступа? [y/N] " -n 1 -r
+# ── 6. Autostart (systemd — Linux only) ──
+if command -v systemctl &>/dev/null; then
+  echo ""
+  read -p "  Set up autostart (systemd)? [y/N] " -n 1 -r
   echo
-  BIND_HOST="127.0.0.1"
-  [[ $REPLY =~ ^[Yy]$ ]] && BIND_HOST="0.0.0.0"
+  if [[ $REPLY =~ ^[Yy]$ ]]; then
+    read -p "  Bind to all interfaces (0.0.0.0) for LAN access? [y/N] " -n 1 -r
+    echo
+    BIND_HOST="127.0.0.1"
+    [[ $REPLY =~ ^[Yy]$ ]] && BIND_HOST="0.0.0.0"
 
-  mkdir -p ~/.config/systemd/user
-  cat > ~/.config/systemd/user/statusline-metrics.service << SEOF
+    mkdir -p ~/.config/systemd/user
+    cat > ~/.config/systemd/user/statusline-metrics.service << SEOF
 [Unit]
 Description=Statusline Metrics Server
 After=network.target
@@ -125,20 +126,21 @@ Environment=METRICS_HOST=$BIND_HOST
 [Install]
 WantedBy=default.target
 SEOF
-  systemctl --user daemon-reload
-  systemctl --user enable --now statusline-metrics
-  ok "systemd service установлен и запущен"
+    systemctl --user daemon-reload
+    systemctl --user enable --now statusline-metrics
+    ok "systemd service installed and started"
+  fi
 fi
 
-# ── 7. Итог ──
+# ── 7. Done ──
 echo ""
 echo "  ────────────────────────────"
-echo "  Установка завершена."
+echo "  Installation complete."
 echo ""
-echo "  Запуск сервера:"
+echo "  Start the server:"
 echo "    python3 $SCRIPT_DIR/server/metrics_server.py"
 echo ""
-echo "  Дашборд:"
+echo "  Dashboard:"
 echo "    http://localhost:9177/"
 echo ""
 echo "  Smoke test:"
