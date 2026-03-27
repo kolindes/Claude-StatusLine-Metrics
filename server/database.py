@@ -391,7 +391,11 @@ def insert_metric(
 
 
 def cleanup(conn: sqlite3.Connection) -> int:
-    """Delete metrics older than RETENTION_DAYS, aggregating deltas into global_stats.
+    """Delete metrics older than RETENTION_DAYS.
+
+    Sessions table (lifetime summaries) is NOT touched — it serves as
+    the permanent source of truth for get_global_stats().
+    No aggregation into global_stats needed (avoids double-counting).
 
     Returns the number of deleted rows.
     """
@@ -405,81 +409,7 @@ def cleanup(conn: sqlite3.Connection) -> int:
     if count == 0:
         return 0
 
-    # Step 1: Compute session deltas from deletable rows and upsert into global_stats
-    conn.execute(
-        """
-        WITH deletable AS (
-            SELECT * FROM metrics WHERE ts < :threshold
-        ),
-        session_deltas AS (
-            SELECT
-                session_id,
-                project_id,
-                MAX(tokens_in)   - MIN(tokens_in)   AS delta_in,
-                MAX(tokens_out)  - MIN(tokens_out)  AS delta_out,
-                MAX(cache_write) - MIN(cache_write) AS delta_cw,
-                MAX(cache_read)  - MIN(cache_read)  AS delta_cr,
-                MAX(cost_usd)    - MIN(cost_usd)    AS delta_cost,
-                MAX(duration_ms) - MIN(duration_ms) AS delta_dur,
-                MAX(lines_added) - MIN(lines_added) AS delta_la,
-                MAX(lines_removed) - MIN(lines_removed) AS delta_lr,
-                MIN(ts)                              AS first_ts,
-                MAX(ts)                              AS last_ts
-            FROM deletable
-            GROUP BY session_id
-        ),
-        project_agg AS (
-            SELECT
-                sd.project_id,
-                (SELECT project_name FROM metrics WHERE project_id = sd.project_id LIMIT 1) AS project_name,
-                (SELECT project_path FROM metrics WHERE project_id = sd.project_id LIMIT 1) AS project_path,
-                SUM(sd.delta_in)     AS total_tokens_in,
-                SUM(sd.delta_out)    AS total_tokens_out,
-                SUM(sd.delta_cw)     AS total_cache_write,
-                SUM(sd.delta_cr)     AS total_cache_read,
-                SUM(sd.delta_cost)   AS total_cost_usd,
-                SUM(sd.delta_dur)    AS total_duration_ms,
-                SUM(sd.delta_la)     AS total_lines_added,
-                SUM(sd.delta_lr)     AS total_lines_removed,
-                MIN(sd.first_ts)     AS first_seen,
-                MAX(sd.last_ts)      AS last_seen,
-                COUNT(DISTINCT sd.session_id) AS total_sessions
-            FROM session_deltas sd
-            GROUP BY sd.project_id
-        )
-        INSERT INTO global_stats (
-            project_id, project_name, project_path,
-            first_seen, last_seen, total_sessions,
-            total_tokens_in, total_tokens_out,
-            total_cache_write, total_cache_read, total_cost_usd,
-            total_duration_ms, total_lines_added, total_lines_removed
-        )
-        SELECT
-            project_id, project_name, project_path,
-            first_seen, last_seen, total_sessions,
-            total_tokens_in, total_tokens_out,
-            total_cache_write, total_cache_read, total_cost_usd,
-            total_duration_ms, total_lines_added, total_lines_removed
-        FROM project_agg
-        ON CONFLICT(project_id) DO UPDATE SET
-            project_name        = excluded.project_name,
-            project_path        = excluded.project_path,
-            first_seen          = MIN(COALESCE(global_stats.first_seen, excluded.first_seen), excluded.first_seen),
-            last_seen           = MAX(COALESCE(global_stats.last_seen, excluded.last_seen), excluded.last_seen),
-            -- total_sessions: not updated here; computed dynamically in get_global_stats
-            total_tokens_in     = global_stats.total_tokens_in     + excluded.total_tokens_in,
-            total_tokens_out    = global_stats.total_tokens_out    + excluded.total_tokens_out,
-            total_cache_write   = global_stats.total_cache_write   + excluded.total_cache_write,
-            total_cache_read    = global_stats.total_cache_read    + excluded.total_cache_read,
-            total_cost_usd      = global_stats.total_cost_usd      + excluded.total_cost_usd,
-            total_duration_ms   = global_stats.total_duration_ms   + excluded.total_duration_ms,
-            total_lines_added   = global_stats.total_lines_added   + excluded.total_lines_added,
-            total_lines_removed = global_stats.total_lines_removed + excluded.total_lines_removed
-        """,
-        {"threshold": threshold},
-    )
-
-    # Step 2: Delete old rows
+    # Delete old metric rows (sessions table untouched)
     conn.execute("DELETE FROM metrics WHERE ts < ?", (threshold,))
 
     # Step 3: Reclaim space
@@ -911,55 +841,36 @@ def get_context_window_analysis(
 def get_global_stats(
     conn: sqlite3.Connection, *, account: str | None = None
 ) -> dict[str, Any]:
-    """Global statistics combining global_stats table and current metrics data.
+    """Global lifetime statistics from sessions table (source of truth).
 
-    Merges historical aggregates (from cleanup) with live session deltas.
+    Sessions table stores max_* per session (never cleaned up).
+    This avoids double-counting that occurred when merging
+    global_stats deltas with sessions table lifetime values.
     """
-    # NOTE: global_stats table has no account column.
-    # Historical data is always global; only live data is account-filtered.
-
-    # 1. Aggregated historical data from global_stats
-    gs_sql = """
-        SELECT
-            COALESCE(SUM(total_tokens_in), 0)     AS hist_tokens_in,
-            COALESCE(SUM(total_tokens_out), 0)    AS hist_tokens_out,
-            COALESCE(SUM(total_cache_write), 0)   AS hist_cache_write,
-            COALESCE(SUM(total_cache_read), 0)    AS hist_cache_read,
-            COALESCE(SUM(total_cost_usd), 0)      AS hist_cost,
-            COALESCE(SUM(total_duration_ms), 0)   AS hist_duration,
-            COALESCE(SUM(total_sessions), 0)      AS hist_sessions,
-            COALESCE(SUM(total_lines_added), 0)   AS hist_lines_added,
-            COALESCE(SUM(total_lines_removed), 0) AS hist_lines_removed,
-            MIN(first_seen)                        AS first_seen
-        FROM global_stats
-    """
-    gs_row = conn.execute(gs_sql).fetchone()
-    hist = _row_to_dict(gs_row) if gs_row else {}
-
-    # 2. Live cumulative totals from sessions table (real lifetime values)
     acct_clause, acct_params = _account_filter(account)
+
+    # Lifetime totals from sessions table (permanent, never cleaned)
     live_sql = f"""
         SELECT
-            COALESCE(SUM(max_tokens_in), 0)    AS live_tokens_in,
-            COALESCE(SUM(max_tokens_out), 0)   AS live_tokens_out,
-            COALESCE(SUM(last_cache_write), 0) AS live_cache_write,
-            COALESCE(SUM(last_cache_read), 0)  AS live_cache_read,
-            COALESCE(SUM(max_cost_usd), 0)     AS live_cost,
-            COALESCE(SUM(max_duration_ms), 0)  AS live_duration,
-            COUNT(*)                             AS live_sessions,
-            0 AS live_lines_added,
-            0 AS live_lines_removed
+            COALESCE(SUM(max_tokens_in), 0)    AS total_tokens_in,
+            COALESCE(SUM(max_tokens_out), 0)   AS total_tokens_out,
+            COALESCE(SUM(last_cache_write), 0) AS total_cache_write,
+            COALESCE(SUM(last_cache_read), 0)  AS total_cache_read,
+            COALESCE(SUM(max_cost_usd), 0)     AS total_cost_usd,
+            COALESCE(SUM(max_duration_ms), 0)  AS total_duration_ms,
+            COUNT(*)                             AS total_sessions,
+            MIN(started_at)                      AS first_seen
         FROM sessions
         WHERE 1=1 {acct_clause}
     """
-    live_row = conn.execute(live_sql, acct_params).fetchone()
-    live = _row_to_dict(live_row) if live_row else {}
+    row = conn.execute(live_sql, acct_params).fetchone()
+    result = _row_to_dict(row) if row else {}
 
     # Lines added/removed: from metrics (sessions table doesn't track these)
     lines_sql = f"""
         SELECT
-            COALESCE(SUM(d_la), 0) AS live_lines_added,
-            COALESCE(SUM(d_lr), 0) AS live_lines_removed
+            COALESCE(SUM(d_la), 0) AS total_lines_added,
+            COALESCE(SUM(d_lr), 0) AS total_lines_removed
         FROM (
             SELECT
                 MAX(lines_added) - MIN(lines_added) AS d_la,
@@ -970,43 +881,23 @@ def get_global_stats(
         )
     """
     lines_row = conn.execute(lines_sql, acct_params).fetchone()
-    if lines_row:
-        live["live_lines_added"] = lines_row["live_lines_added"]
-        live["live_lines_removed"] = lines_row["live_lines_removed"]
+    result["total_lines_added"] = lines_row["total_lines_added"] if lines_row else 0
+    result["total_lines_removed"] = lines_row["total_lines_removed"] if lines_row else 0
 
-    # 3. Per-project breakdown
-    proj_sql = """
-        SELECT project_id, project_name, project_path,
-               total_tokens_in, total_tokens_out, total_cost_usd,
-               total_sessions, first_seen, last_seen
-        FROM global_stats
-        ORDER BY last_seen DESC
-    """
-    proj_rows = conn.execute(proj_sql).fetchall()
-    projects = _rows_to_list(proj_rows)
+    # Last seen
+    result["last_seen"] = conn.execute(
+        "SELECT MAX(last_seen_at) AS ls FROM sessions"
+    ).fetchone()["ls"] or 0
 
-    # 4. First seen from metrics if global_stats is empty
-    first_seen = hist.get("first_seen")
-    if not first_seen:
+    # First seen fallback
+    if not result.get("first_seen"):
         fs_row = conn.execute("SELECT MIN(ts) AS fs FROM metrics").fetchone()
-        first_seen = fs_row["fs"] if fs_row and fs_row["fs"] else 0
+        result["first_seen"] = fs_row["fs"] if fs_row and fs_row["fs"] else 0
 
-    return {
-        "total_tokens_in": hist.get("hist_tokens_in", 0) + live.get("live_tokens_in", 0),
-        "total_tokens_out": hist.get("hist_tokens_out", 0) + live.get("live_tokens_out", 0),
-        "total_cache_write": hist.get("hist_cache_write", 0) + live.get("live_cache_write", 0),
-        "total_cache_read": hist.get("hist_cache_read", 0) + live.get("live_cache_read", 0),
-        "total_cost_usd": hist.get("hist_cost", 0) + live.get("live_cost", 0),
-        "total_duration_ms": hist.get("hist_duration", 0) + live.get("live_duration", 0),
-        "total_sessions": conn.execute("SELECT COUNT(*) FROM sessions").fetchone()[0],
-        "total_lines_added": hist.get("hist_lines_added", 0) + live.get("live_lines_added", 0),
-        "total_lines_removed": hist.get("hist_lines_removed", 0) + live.get("live_lines_removed", 0),
-        "first_seen": first_seen,
-        "last_seen": conn.execute(
-            "SELECT MAX(last_seen_at) AS ls FROM sessions"
-        ).fetchone()["ls"] or 0,
-        "projects": projects,
-    }
+    # Per-project breakdown (empty until cleanup populates global_stats)
+    result["projects"] = []
+
+    return result
 
 
 def get_sessions(
