@@ -884,14 +884,19 @@ def get_global_stats(
     result["total_lines_added"] = lines_row["total_lines_added"] if lines_row else 0
     result["total_lines_removed"] = lines_row["total_lines_removed"] if lines_row else 0
 
-    # Last seen
-    result["last_seen"] = conn.execute(
-        "SELECT MAX(last_seen_at) AS ls FROM sessions"
-    ).fetchone()["ls"] or 0
+    # Last seen (with account filter)
+    ls_row = conn.execute(
+        f"SELECT MAX(last_seen_at) AS ls FROM sessions WHERE 1=1 {acct_clause}",
+        acct_params,
+    ).fetchone()
+    result["last_seen"] = ls_row["ls"] if ls_row and ls_row["ls"] else 0
 
-    # First seen fallback
+    # First seen fallback (with account filter)
     if not result.get("first_seen"):
-        fs_row = conn.execute("SELECT MIN(ts) AS fs FROM metrics").fetchone()
+        fs_row = conn.execute(
+            f"SELECT MIN(ts) AS fs FROM metrics WHERE 1=1 {acct_clause}",
+            acct_params,
+        ).fetchone()
         result["first_seen"] = fs_row["fs"] if fs_row and fs_row["fs"] else 0
 
     # Per-project breakdown (empty until cleanup populates global_stats)
