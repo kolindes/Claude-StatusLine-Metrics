@@ -836,6 +836,10 @@ async function loadRateLimits() {
                   prediction;
     section.style.display = hasData ? '' : 'none';
 
+    // Store caps for chart tooltip use (accessible from charts.js)
+    window._rlCap5h = (estimates5h && estimates5h.avg > 0) ? estimates5h.avg : 0;
+    window._rlCap7d = (estimates7d && estimates7d.avg > 0) ? estimates7d.avg : 0;
+
     // Show token usage estimation
     if (estimates5h && estimates5h.avg > 0) {
       const used5h = Math.round((state._rl5hPct || 0) * estimates5h.avg / 100);

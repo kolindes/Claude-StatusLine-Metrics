@@ -356,7 +356,12 @@ function createRateLimitsChart(canvasId) {
           callbacks: {
             label(ctx) {
               const val = ctx.parsed ? ctx.parsed.y : 0;
-              return ctx.dataset.label + ': ' + (val != null ? val.toFixed(1) : '0') + '%';
+              const pct = val != null ? val.toFixed(1) : '0';
+              // Estimate tokens from % using stored caps
+              const cap = ctx.datasetIndex === 0 ? (window._rlCap5h || 0) : (window._rlCap7d || 0);
+              const tokens = cap > 0 ? Math.round(val * cap / 100) : 0;
+              const tokenStr = cap > 0 ? ' (~' + fmtTokenAxis(tokens) + ' tokens)' : '';
+              return ctx.dataset.label + ': ' + pct + '%' + tokenStr;
             },
           },
         },
