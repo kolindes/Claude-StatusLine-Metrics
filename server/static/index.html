@@ -82,36 +82,54 @@
 
         <!-- KPI Cards -->
         <div class="kpi-row">
+          <!-- 1. Total Cost -->
           <div class="kpi-card">
-            <div class="kpi-label">Total Tokens</div>
-            <div class="kpi-value accent-blue" id="kpi-tokens-value">0</div>
-            <div class="kpi-detail" id="kpi-tokens-detail">In: 0 / Out: 0</div>
-            <div class="kpi-trend neutral" id="kpi-tokens-trend"></div>
+            <div class="kpi-label">Total Cost</div>
+            <div class="kpi-value accent-yellow" id="kpi-cost-value">$0</div>
+            <div class="kpi-detail" id="kpi-cost-detail">--</div>
+            <div class="kpi-trend" id="kpi-cost-trend"></div>
           </div>
+          <!-- 2. Tokens Out -->
           <div class="kpi-card">
-            <div class="kpi-label">Cache</div>
-            <div class="kpi-value accent-green" id="kpi-cache-value">0</div>
-            <div class="kpi-detail" id="kpi-cache-detail">W: 0 / R: 0</div>
-            <div class="kpi-trend neutral" id="kpi-cache-trend"></div>
+            <div class="kpi-label">Tokens Out</div>
+            <div class="kpi-value accent-green" id="kpi-tokout-value">0</div>
+            <div class="kpi-detail" id="kpi-tokout-detail">--</div>
+            <div class="kpi-trend" id="kpi-tokout-trend"></div>
           </div>
+          <!-- 3. Burn / min -->
+          <div class="kpi-card">
+            <div class="kpi-label">Burn / min</div>
+            <div class="kpi-value accent-blue" id="kpi-burnmin-value">0</div>
+            <div class="kpi-detail" id="kpi-burnmin-detail">--</div>
+          </div>
+          <!-- 4. Burn / hour -->
+          <div class="kpi-card">
+            <div class="kpi-label">Burn / hour</div>
+            <div class="kpi-value accent-blue" id="kpi-burnhour-value">0</div>
+            <div class="kpi-detail" id="kpi-burnhour-detail">--</div>
+          </div>
+          <!-- 5. Rate 5h -->
           <div class="kpi-card">
             <div class="kpi-label">Rate 5h</div>
             <div class="kpi-value" id="kpi-rate5h-value">0%</div>
             <div class="kpi-detail" id="kpi-rate5h-detail">--</div>
             <div class="kpi-trend neutral" id="kpi-rate5h-trend"></div>
           </div>
+          <!-- 6. Rate 7d -->
           <div class="kpi-card">
             <div class="kpi-label">Rate 7d</div>
             <div class="kpi-value accent-purple" id="kpi-rate7d-value">0%</div>
             <div class="kpi-detail" id="kpi-rate7d-detail">--</div>
             <div class="kpi-trend neutral" id="kpi-rate7d-trend"></div>
           </div>
+          <!-- 7. Context -->
           <div class="kpi-card">
             <div class="kpi-label">Context</div>
             <div class="kpi-value accent-yellow" id="kpi-context-value">0%</div>
             <div class="kpi-detail" id="kpi-context-detail">--</div>
             <div class="kpi-trend neutral" id="kpi-context-trend"></div>
           </div>
+          <!-- 8. Active Sessions -->
           <div class="kpi-card">
             <div class="kpi-label">Active Sessions</div>
             <div class="kpi-value" id="kpi-active-value">0</div>
@@ -120,14 +138,13 @@
           </div>
         </div>
 
-        <!-- Main Chart: Tokens Timeline -->
+        <!-- Main Chart: Activity -->
         <div class="chart-section">
           <div class="chart-container">
-            <div class="chart-title" id="tokens-chart-title">Tokens Timeline</div>
+            <div class="chart-title" id="tokens-chart-title">Activity</div>
             <canvas id="chart-tokens"></canvas>
             <div class="chart-legend-inline">
-              <span class="legend-item" style="color:#ff8c00"><span class="legend-dot" style="background:#ff8c00"></span>Tokens In</span>
-              <span class="legend-item" style="color:#4ade80"><span class="legend-dot" style="background:#4ade80"></span>Tokens Out</span>
+              <span class="legend-item" style="color:#ff8c00"><span class="legend-dot" style="background:#ff8c00"></span>Tokens Out</span>
             </div>
           </div>
         </div>

@@ -85,4 +85,12 @@ const API = {
   /** Response time data */
   responseTime: (params) =>
     fetchJSON('/api/response-time', params),
+
+  /** Activity (tokens delta per bucket) */
+  activity: (params) =>
+    fetchJSON('/api/activity', params),
+
+  /** Burn rate (tokens per minute/hour) */
+  burnRate: (params) =>
+    fetchJSON('/api/burn-rate', params),
 };

@@ -162,6 +162,7 @@ function animateValue(el, from, to, duration) {
     const current = from + (to - from) * ease;
     if (fmt === 'pct') el.textContent = fmtPct(current);
     else if (fmt === 'int') el.textContent = String(Math.round(current));
+    else if (fmt === 'cost') el.textContent = fmtCost(current);
     else el.textContent = fmtTokens(current);
     if (progress < 1) el._animFrame = requestAnimationFrame(step);
     else el._animFrame = null;
@@ -391,19 +392,28 @@ async function loadOverview() {
     sessionsParams.project_id = state.currentProject;
   }
 
+  // Activity params
+  const activityParams = { from: tr.from, to: tr.to, interval: getInterval() };
+  if (state.currentProject !== null) {
+    activityParams.project_id = state.currentProject;
+  }
+
   // Load multiple endpoints in parallel
   const results = await Promise.all([
     API.rateLimitsCurrent().catch(function() { return null; }),
     API.sessions(sessionsParams).catch(function() { return []; }),
     API.health().catch(function() { return null; }),
+    API.burnRate().catch(function() { return null; }),
+    API.activity(activityParams).catch(function() { return []; }),
   ]);
   const rateLimits = results[0];
   const sessions = results[1];
   const health = results[2];
+  const burn = results[3];
+  const activity = results[4];
 
   // If a project is selected, load project-specific data
   let projectSummary = null;
-  let timeseries = [];
   let allSummaries = [];
   const pid = state.currentProject || (state.projects.length > 0 ? state.projects[0].project_id : null);
 
@@ -411,10 +421,8 @@ async function loadOverview() {
     // Single project selected
     const pResults = await Promise.all([
       API.projectSummary(pid, { from: tr.from, to: tr.to }).catch(function() { return null; }),
-      API.metrics({ project_id: pid, from: tr.from, to: tr.to, interval: getInterval() }).catch(function() { return []; }),
     ]);
     projectSummary = pResults[0];
-    timeseries = pResults[1];
     allSummaries = [projectSummary];
   } else if (state.projects.length > 0) {
     // All Projects: single aggregated summary query for KPIs
@@ -429,20 +437,15 @@ async function loadOverview() {
         return API.projectSummary(p.project_id, { from: tr.from, to: tr.to }).catch(function() { return null; });
       })
     );
-
-    // Timeseries: aggregate across all projects (no project_id)
-    timeseries = await API.metrics({
-      from: tr.from, to: tr.to, interval: getInterval(),
-    }).catch(function() { return []; });
   }
 
   // KPI Cards
-  updateKpiCards(projectSummary, rateLimits, health);
+  updateKpiCards(projectSummary, rateLimits, health, burn);
 
-  setText('#tokens-chart-title', 'Tokens Timeline');
+  setText('#tokens-chart-title', 'Activity');
 
   // Charts
-  updateTokensTimeline(timeseries);
+  updateTokensTimeline(activity);
   const barProjects = state.currentProject !== null
     ? [{ project_name: (state.projects.find(function(p) { return p.project_id === state.currentProject; }) || {}).project_name || state.currentProject }]
     : state.projects;
@@ -457,19 +460,22 @@ async function loadOverview() {
   setText('.last-update', 'Updated ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
 }
 
-function updateKpiCards(summary, rateLimits, health) {
+function updateKpiCards(summary, rateLimits, health, burn) {
   if (summary) {
-    const totalTokens = (summary.tokens_in || 0) + (summary.tokens_out || 0);
-    const totalCache = (summary.cache_write || 0) + (summary.cache_read || 0);
-    const cacheHit = totalCache > 0
-      ? ((summary.cache_read || 0) / totalCache * 100).toFixed(0)
-      : 0;
+    const costVal = summary.cost_usd || 0;
+    setKpiValue('#kpi-cost-value', costVal, 'cost');
+    setText('#kpi-cost-detail', costVal > 0 ? 'across ' + (summary.sessions || 0) + ' sessions' : 'subscription (no cost data)');
 
-    setKpiValue('#kpi-tokens-value', totalTokens, 'tokens');
-    setText('#kpi-tokens-detail', 'In: ' + fmtTokens(summary.tokens_in) + ' / Out: ' + fmtTokens(summary.tokens_out));
+    const tokOut = summary.tokens_out || 0;
+    setKpiValue('#kpi-tokout-value', tokOut, 'tokens');
+    setText('#kpi-tokout-detail', 'In: ' + fmtTokens(summary.tokens_in || 0));
+  }
 
-    setKpiValue('#kpi-cache-value', totalCache, 'tokens');
-    setText('#kpi-cache-detail', 'W:' + fmtTokens(summary.cache_write) + ' R:' + fmtTokens(summary.cache_read) + ' ' + cacheHit + '%hit');
+  if (burn) {
+    setText('#kpi-burnmin-value', fmtTokens(burn.tokens_per_min));
+    setText('#kpi-burnmin-detail', burn.active_minutes + ' active min last hour');
+    setText('#kpi-burnhour-value', fmtTokens(burn.tokens_per_hour));
+    setText('#kpi-burnhour-detail', '~' + fmtTokens(burn.total_tokens_out) + ' last hour');
   }
 
   if (rateLimits) {
@@ -509,10 +515,8 @@ function updateKpiCards(summary, rateLimits, health) {
 
   // 3.1: KPI Trend badges
   if (summary) {
-    const totalTokensTrend = (summary.tokens_in || 0) + (summary.tokens_out || 0);
-    const totalCacheTrend = (summary.cache_write || 0) + (summary.cache_read || 0);
-    updateKpiTrend('kpi-tokens-trend', 'tokens', totalTokensTrend);
-    updateKpiTrend('kpi-cache-trend', 'cache', totalCacheTrend);
+    updateKpiTrend('kpi-cost-trend', 'cost', summary.cost_usd || 0);
+    updateKpiTrend('kpi-tokout-trend', 'tokout', summary.tokens_out || 0);
     updateKpiTrend('kpi-context-trend', 'context', summary.avg_ctx_pct || 0);
   }
   if (rateLimits) {
@@ -566,20 +570,19 @@ function setChartEmpty(canvasId, empty) {
   if (canvas) canvas.style.opacity = empty ? '0.15' : '1';
 }
 
-function updateTokensTimeline(timeseries) {
+function updateTokensTimeline(activity) {
   if (!state.charts.tokens) {
     state.charts.tokens = createTokensChart('chart-tokens');
   }
-  const empty = !timeseries || timeseries.length === 0;
+  const empty = !activity || activity.length === 0;
   setChartEmpty('chart-tokens', empty);
   if (empty) {
-    updateChart(state.charts.tokens, [], [[], []]);
+    updateChart(state.charts.tokens, [], [[]]);
     return;
   }
-  const labels = timeseries.map(function(r) { return fmtTimeLabel(r.bucket_ts); });
-  const tokensIn = timeseries.map(function(r) { return r.tokens_in || 0; });
-  const tokensOut = timeseries.map(function(r) { return r.tokens_out || 0; });
-  updateChart(state.charts.tokens, labels, [tokensIn, tokensOut]);
+  const labels = activity.map(function(r) { return fmtTimeLabel(r.bucket_ts); });
+  const tokensOut = activity.map(function(r) { return r.tokens_out || 0; });
+  updateChart(state.charts.tokens, labels, [tokensOut]);
 }
 
 function updateProjectsBarChart(summaries, projectsList) {

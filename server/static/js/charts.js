@@ -172,37 +172,18 @@ function createTokensChart(canvasId) {
   if (!ctx) return null;
 
   return new Chart(ctx.getContext('2d'), {
-    type: 'line',
+    type: 'bar',
     data: {
       labels: [],
       datasets: [
         {
-          label: 'Tokens In',
-          data: [],
-          borderColor: C.tokenIn,
-          backgroundColor: C.tokenIn,
-          borderWidth: 2,
-          fill: false,
-          tension: 0.35,
-          pointRadius: 0,
-          pointHoverRadius: 5,
-          pointHoverBackgroundColor: C.tokenIn,
-          pointHoverBorderColor: '#fff',
-          pointHoverBorderWidth: 1,
-        },
-        {
           label: 'Tokens Out',
           data: [],
-          borderColor: C.tokenOut,
-          backgroundColor: C.tokenOut,
-          borderWidth: 2,
-          fill: false,
-          tension: 0.35,
-          pointRadius: 0,
-          pointHoverRadius: 5,
-          pointHoverBackgroundColor: C.tokenOut,
-          pointHoverBorderColor: '#fff',
-          pointHoverBorderWidth: 1,
+          backgroundColor: C.primary + 'cc',
+          borderColor: C.primary,
+          borderWidth: 1,
+          borderRadius: 3,
+          barPercentage: 0.8,
         },
       ],
     },
@@ -212,9 +193,8 @@ function createTokensChart(canvasId) {
         x: { ...SCALE_DEFAULTS.x, offset: true },
         y: {
           ...SCALE_DEFAULTS.y,
-          stacked: false,
-          beginAtZero: false,
-          grace: '10%',
+          beginAtZero: true,
+          grace: '5%',
           ticks: {
             ...SCALE_DEFAULTS.y.ticks,
             callback: fmtTokenAxis,
@@ -228,7 +208,7 @@ function createTokensChart(canvasId) {
           ...CHART_DEFAULTS.plugins.tooltip,
           callbacks: {
             label(ctx) {
-              return ctx.dataset.label + ': ' + fmtTokenAxis(ctx.parsed.y);
+              return fmtTokenAxis(ctx.parsed.y) + ' tokens out';
             },
           },
         },

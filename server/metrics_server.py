@@ -39,7 +39,9 @@ from server.database import (  # noqa: E402
     cleanup,
     compute_rate_windows,
     get_active_sessions,
+    get_activity_per_bucket,
     get_all_projects_summary,
+    get_burn_rate,
     get_connection,
     get_context_window_analysis,
     get_db_size,
@@ -401,6 +403,35 @@ def api_response_time() -> tuple[Response, int]:
     account = request.args.get("account")
     db = get_db()
     data = get_response_time(db, project_id, from_ts, to_ts, account=account)
+    return jsonify(data), 200
+
+
+@app.route("/api/activity", methods=["GET"])
+def api_activity() -> tuple[Response, int]:
+    """Tokens OUT delta per time bucket (activity chart)."""
+    from_ts, to_ts = _parse_ts_range()
+    interval_str = request.args.get("interval", "5m")
+    interval_seconds = INTERVAL_MAP.get(interval_str)
+    if interval_seconds is None:
+        valid = ", ".join(INTERVAL_MAP.keys())
+        return jsonify({"error": f"invalid interval, use one of: {valid}"}), 400
+
+    project_id = request.args.get("project_id")
+    account = request.args.get("account")
+    db = get_db()
+    data = get_activity_per_bucket(
+        db, from_ts, to_ts, interval_seconds,
+        project_id=project_id, account=account,
+    )
+    return jsonify(data), 200
+
+
+@app.route("/api/burn-rate", methods=["GET"])
+def api_burn_rate() -> tuple[Response, int]:
+    """Tokens OUT burn rate: per active minute and per hour."""
+    account = request.args.get("account")
+    db = get_db()
+    data = get_burn_rate(db, account=account)
     return jsonify(data), 200
 
 

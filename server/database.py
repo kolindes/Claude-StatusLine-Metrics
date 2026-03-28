@@ -721,6 +721,102 @@ def get_metrics_timeseries_all(
     return _rows_to_list(conn.execute(sql, params).fetchall())
 
 
+def get_activity_per_bucket(
+    conn: sqlite3.Connection,
+    from_ts: int,
+    to_ts: int,
+    interval_seconds: int,
+    *,
+    project_id: str | None = None,
+    account: str | None = None,
+) -> list[dict[str, Any]]:
+    """Tokens OUT delta per time bucket, correctly handling session boundaries.
+
+    Returns per-bucket SUM of per-session (MAX-MIN) tokens_out.
+    This gives actual tokens generated within each bucket, not cumulative max.
+    """
+    acct_clause, acct_params = _account_filter(account)
+    proj_clause = ""
+    proj_params: list[Any] = []
+    if project_id:
+        proj_clause = " AND project_id = ?"
+        proj_params = [project_id]
+
+    interval = int(interval_seconds)
+    params: list[Any] = [from_ts, to_ts] + proj_params + acct_params
+
+    sql = f"""
+        WITH session_bucket_deltas AS (
+            SELECT
+                (ts / {interval}) * {interval} AS bucket_ts,
+                session_id,
+                MAX(tokens_out) - MIN(tokens_out) AS delta_out,
+                MAX(tokens_in) - MIN(tokens_in) AS delta_in
+            FROM metrics
+            WHERE ts >= ? AND ts <= ? {proj_clause} {acct_clause}
+            GROUP BY bucket_ts, session_id
+        )
+        SELECT
+            bucket_ts,
+            SUM(delta_out) AS tokens_out,
+            SUM(delta_in) AS tokens_in,
+            SUM(delta_out + delta_in) AS tokens_total
+        FROM session_bucket_deltas
+        GROUP BY bucket_ts
+        ORDER BY bucket_ts ASC
+    """
+    return _rows_to_list(conn.execute(sql, params).fetchall())
+
+
+def get_burn_rate(
+    conn: sqlite3.Connection, *, account: str | None = None
+) -> dict[str, Any]:
+    """Tokens OUT burn rate: per active minute and per hour.
+
+    Looks at the last hour. Counts active minutes (minutes with at least 1 metric record).
+    Computes total tokens_out delta. burn_per_min = total / active_minutes.
+    """
+    cutoff = int(time.time()) - 3600
+    acct_clause, acct_params = _account_filter(account)
+    params: list[Any] = [cutoff] + acct_params
+
+    sql = f"""
+        WITH recent AS (
+            SELECT session_id, ts, tokens_out
+            FROM metrics
+            WHERE ts >= ? {acct_clause}
+        ),
+        session_deltas AS (
+            SELECT session_id, MAX(tokens_out) - MIN(tokens_out) AS delta_out
+            FROM recent GROUP BY session_id
+        ),
+        active_minutes AS (
+            SELECT COUNT(DISTINCT ts / 60) AS minutes FROM recent
+        )
+        SELECT
+            COALESCE(SUM(delta_out), 0) AS total_out,
+            (SELECT minutes FROM active_minutes) AS active_minutes
+        FROM session_deltas
+    """
+    row = conn.execute(sql, params).fetchone()
+    total_out = row["total_out"] if row else 0
+    active_minutes = row["active_minutes"] if row else 0
+
+    if active_minutes > 0:
+        burn_per_min = total_out / active_minutes
+        burn_per_hour = burn_per_min * 60
+    else:
+        burn_per_min = 0
+        burn_per_hour = 0
+
+    return {
+        "tokens_per_min": round(burn_per_min),
+        "tokens_per_hour": round(burn_per_hour),
+        "active_minutes": active_minutes,
+        "total_tokens_out": total_out,
+    }
+
+
 def get_rate_limits_current(
     conn: sqlite3.Connection, *, account: str | None = None
 ) -> dict[str, Any]:
