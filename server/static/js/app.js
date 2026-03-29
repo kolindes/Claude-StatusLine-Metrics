@@ -1564,9 +1564,9 @@ async function init() {
   const current = await API.accountCurrent().catch(function() { return {account: 'default'}; });
   const acctSelect = document.getElementById('account-select');
   if (acctSelect) {
-    acctSelect.innerHTML = '';
+    clearChildren(acctSelect);
     accounts.forEach(function(a) {
-      var opt = document.createElement('option');
+      const opt = document.createElement('option');
       opt.value = a;
       opt.textContent = a;
       if (a === current.account) opt.selected = true;
@@ -1582,21 +1582,21 @@ async function init() {
     });
   }
 
-  var createBtn = document.getElementById('account-create-btn');
+  const createBtn = document.getElementById('account-create-btn');
   if (createBtn) {
     createBtn.addEventListener('click', async function() {
-      var name = prompt('Account name (lowercase, no spaces):');
-      if (!name || !/^[a-z0-9][a-z0-9-]*$/.test(name)) return;
-      var res = await API.accountCreate(name);
+      const name = prompt('Account name (lowercase, no spaces):');
+      if (!name || !/^[a-z0-9][a-z0-9-]{0,62}$/.test(name)) return;
+      const res = await API.accountCreate(name);
       if (res && res.error) {
         alert('Error: ' + res.error);
         return;
       }
       // Refresh accounts list and switch
-      var accts = await API.accounts();
-      acctSelect.innerHTML = '';
+      const accts = await API.accounts();
+      clearChildren(acctSelect);
       accts.forEach(function(a) {
-        var opt = document.createElement('option');
+        const opt = document.createElement('option');
         opt.value = a;
         opt.textContent = a;
         if (a === name) opt.selected = true;

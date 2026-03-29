@@ -39,16 +39,28 @@ const API = {
   /** Account management */
   accounts: () => fetchJSON('/api/accounts'),
   accountCurrent: () => fetchJSON('/api/accounts/current'),
-  accountSwitch: (account) => fetch('/api/accounts/switch', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({account})
-  }).then(function(r) { return r.json(); }),
-  accountCreate: (account) => fetch('/api/accounts/create', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({account})
-  }).then(function(r) { return r.json(); }),
+  accountSwitch: (account) => {
+    const ctrl = new AbortController();
+    const tid = setTimeout(function() { ctrl.abort(); }, 10000);
+    return fetch('/api/accounts/switch', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({account}),
+      signal: ctrl.signal,
+    }).then(function(r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+      .finally(function() { clearTimeout(tid); });
+  },
+  accountCreate: (account) => {
+    const ctrl = new AbortController();
+    const tid = setTimeout(function() { ctrl.abort(); }, 10000);
+    return fetch('/api/accounts/create', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({account}),
+      signal: ctrl.signal,
+    }).then(function(r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+      .finally(function() { clearTimeout(tid); });
+  },
 
   /** List all projects */
   projects: (account) => fetchJSON('/api/projects', { account }),

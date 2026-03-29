@@ -313,6 +313,9 @@ def api_accounts_switch() -> tuple[Response, int]:
     account = data["account"]
     if not isinstance(account, str) or not account:
         return jsonify({"error": "account must be a non-empty string"}), 400
+    # Validate: same rules as create (security: prevent filesystem abuse)
+    if account != "default" and (not re.match(r"^[a-z0-9][a-z0-9-]{0,62}$", account)):
+        return jsonify({"error": "invalid name (lowercase a-z, 0-9, hyphens, max 64 chars)"}), 400
 
     db_path = get_db_path(account)
     # Ensure the DB exists and is initialised
@@ -341,9 +344,9 @@ def api_accounts_create() -> tuple[Response, int]:
     if not isinstance(account, str) or not account:
         return jsonify({"error": "account must be a non-empty string"}), 400
 
-    # Validate name: lowercase alphanumeric + hyphens
-    if not re.match(r"^[a-z0-9][a-z0-9-]*$", account):
-        return jsonify({"error": "invalid name (lowercase a-z, 0-9, hyphens)"}), 400
+    # Validate name: lowercase alphanumeric + hyphens, max 64 chars
+    if not re.match(r"^[a-z0-9][a-z0-9-]{0,62}$", account):
+        return jsonify({"error": "invalid name (lowercase a-z, 0-9, hyphens, max 64 chars)"}), 400
 
     db_path = get_db_path(account)
     if Path(db_path).exists():
