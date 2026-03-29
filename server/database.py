@@ -694,6 +694,7 @@ def get_metrics_timeseries_all(
 ) -> list[dict[str, Any]]:
     """Aggregate timeseries across ALL projects (not per-project)."""
     acct_clause, acct_params = _account_filter(account)
+    # interval_seconds is always int-cast, safe for f-string interpolation
     bucket = f"(ts / {int(interval_seconds)}) * {int(interval_seconds)}"
     params: list[Any] = [from_ts, to_ts] + acct_params
     sql = f"""
@@ -741,6 +742,7 @@ def get_activity_per_bucket(
         proj_clause = " AND project_id = ?"
         proj_params = [project_id]
 
+    # interval_seconds is always int-cast, safe for f-string interpolation
     interval = int(interval_seconds)
     params: list[Any] = [from_ts, to_ts] + proj_params + acct_params
 
@@ -918,6 +920,7 @@ def get_rate_limits_history(
           AND (rate_5h_pct > 0 OR rate_7d_pct > 0)
         GROUP BY ts / 300
         ORDER BY ts ASC
+        LIMIT 2000
     """
     rows = conn.execute(sql, params).fetchall()
     return _rows_to_list(rows)
@@ -1119,18 +1122,30 @@ def get_sessions(
             s.max_tokens_out,
             s.max_cost_usd,
             s.max_duration_ms,
-            (SELECT m.ctx_size FROM metrics m
-             WHERE m.session_id = s.session_id
-             ORDER BY m.ts DESC LIMIT 1) AS last_ctx_size,
-            (SELECT m.ctx_pct FROM metrics m
-             WHERE m.session_id = s.session_id
-             ORDER BY m.ts DESC LIMIT 1) AS last_ctx_pct,
-            (SELECT COUNT(*) FROM (
-                SELECT ctx_pct, LAG(ctx_pct) OVER (ORDER BY ts) AS prev
-                FROM metrics m2 WHERE m2.session_id = s.session_id AND m2.ctx_pct > 0
-             ) WHERE prev - ctx_pct > 20) AS compressions
+            lc.last_ctx_size,
+            lc.last_ctx_pct,
+            COALESCE(comp.compressions, 0) AS compressions
             {period_cols}
         FROM sessions s
+        LEFT JOIN (
+            SELECT m1.session_id,
+                   m1.ctx_size AS last_ctx_size,
+                   m1.ctx_pct  AS last_ctx_pct
+            FROM metrics m1
+            WHERE m1.ts = (SELECT MAX(m2.ts) FROM metrics m2
+                           WHERE m2.session_id = m1.session_id)
+        ) lc ON lc.session_id = s.session_id
+        LEFT JOIN (
+            SELECT session_id, COUNT(*) AS compressions
+            FROM (
+                SELECT session_id, ctx_pct,
+                       LAG(ctx_pct) OVER (PARTITION BY session_id ORDER BY ts) AS prev_ctx
+                FROM metrics
+                WHERE ctx_pct > 0
+            )
+            WHERE prev_ctx IS NOT NULL AND prev_ctx - ctx_pct > 20
+            GROUP BY session_id
+        ) comp ON comp.session_id = s.session_id
         {period_join}
         {where}
         ORDER BY s.last_seen_at DESC

@@ -1310,24 +1310,28 @@ async function loadGlobalStats() {
 
   clearChildren(tbody);
 
-  // Use stats.projects if available, otherwise fall back to live project data
+  // Use stats.projects if available, otherwise aggregate from sessions API (no N+1)
   let projects = stats.projects || [];
-  if (projects.length === 0 && state.projects && state.projects.length > 0) {
-    // Build from live sessions data + per-project summaries (parallel)
-    const summaries = await Promise.all(
-      state.projects.map(function(p) {
-        return API.projectSummary(p.project_id).catch(function() { return null; });
-      })
-    );
-    projects = state.projects.map(function(p, i) {
-      const s = summaries[i];
+  if (projects.length === 0) {
+    const sessions = await API.sessions({ limit: 500 }).catch(function() { return []; });
+    const byProject = {};
+    sessions.forEach(function(s) {
+      const name = s.project_name || 'unknown';
+      if (!byProject[name]) byProject[name] = { tokens: 0, cost: 0, sessions: 0, last_active: 0 };
+      const p = byProject[name];
+      p.tokens += (s.max_tokens_in || 0) + (s.max_tokens_out || 0);
+      p.cost += s.max_cost_usd || 0;
+      p.sessions++;
+      if (s.last_seen_at > p.last_active) p.last_active = s.last_seen_at;
+    });
+    projects = Object.entries(byProject).map(function(entry) {
+      const name = entry[0], d = entry[1];
       return {
-        project_name: p.project_name,
-        total_tokens_in: s ? s.tokens_in : 0,
-        total_tokens_out: s ? s.tokens_out : 0,
-        total_cost_usd: s ? s.cost_usd : 0,
-        total_sessions: s ? s.sessions : p.sessions_count || 0,
-        last_seen: p.last_active
+        project_name: name,
+        total_tokens_in: d.tokens,
+        total_cost_usd: d.cost,
+        total_sessions: d.sessions,
+        last_seen: d.last_active
       };
     });
   }
@@ -1459,7 +1463,7 @@ function setupTimeFilter() {
       state.timeRange = btn.dataset.range;
       state.prevKpi = {};
       state.sessionsPage = 0;
-  state.barChartPage = 0;
+      state.barChartPage = 0;
       localStorage.setItem('sm_timeRange', btn.dataset.range);
       $$('.time-filter-bar button[data-range]').forEach(function(b) {
         b.classList.toggle('active', b === btn);
