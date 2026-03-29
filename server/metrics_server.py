@@ -104,16 +104,39 @@ def get_db_path(account: str = "default") -> str:
     return str(base.with_name(f"statusline-metrics-{account}.db"))
 
 
-def list_accounts() -> list[str]:
-    """Discover all account DB files on disk."""
+def _accounts_map_path() -> Path:
+    """Path to accounts display-name mapping file."""
+    return Path(config.DB_PATH).expanduser().parent / "accounts.json"
+
+
+def _load_accounts_map() -> dict[str, str]:
+    """Load {db_key: display_name} mapping. Missing keys = key as name."""
+    p = _accounts_map_path()
+    if p.exists():
+        try:
+            import json
+            return json.loads(p.read_text())
+        except Exception:
+            pass
+    return {}
+
+
+def _save_accounts_map(m: dict[str, str]) -> None:
+    import json
+    _accounts_map_path().write_text(json.dumps(m, indent=2))
+
+
+def list_accounts() -> list[dict[str, str]]:
+    """Discover all account DB files, return [{id, name}]."""
     base = Path(config.DB_PATH).expanduser()
     parent = base.parent
-    accounts = ["default"]
+    keys = ["default"]
     for f in sorted(parent.glob("statusline-metrics-*.db")):
-        name = f.stem.replace("statusline-metrics-", "")
-        if name and name not in accounts:
-            accounts.append(name)
-    return accounts
+        k = f.stem.replace("statusline-metrics-", "")
+        if k and k not in keys:
+            keys.append(k)
+    names = _load_accounts_map()
+    return [{"id": k, "name": names.get(k, k)} for k in keys]
 
 # Required fields for POST /api/metrics
 _REQUIRED_FIELDS: list[str] = ["ts", "sid", "pid", "pname", "ppath", "host", "model"]
@@ -296,10 +319,11 @@ def api_accounts() -> tuple[Response, int]:
 
 @app.route("/api/accounts/current", methods=["GET"])
 def api_accounts_current() -> tuple[Response, int]:
-    """Return the currently active account name."""
+    """Return the currently active account."""
     with _account_lock:
         acct = _current_account
-    return jsonify({"account": acct}), 200
+    names = _load_accounts_map()
+    return jsonify({"account": acct, "name": names.get(acct, acct)}), 200
 
 
 @app.route("/api/accounts/switch", methods=["POST"])
@@ -364,6 +388,26 @@ def api_accounts_create() -> tuple[Response, int]:
 
     logger.info("Created account '%s' (db: %s)", account, db_path)
     return jsonify({"status": "ok", "account": account}), 200
+
+
+@app.route("/api/accounts/rename", methods=["POST"])
+def api_accounts_rename() -> tuple[Response, int]:
+    """Rename an account's display name (db file unchanged)."""
+    data = request.get_json(silent=True)
+    if not data or "account" not in data or "name" not in data:
+        return jsonify({"error": "missing 'account' and 'name' fields"}), 400
+
+    account = data["account"]
+    new_name = data["name"].strip()
+    if not new_name or len(new_name) > 64:
+        return jsonify({"error": "name must be 1-64 characters"}), 400
+
+    m = _load_accounts_map()
+    m[account] = new_name
+    _save_accounts_map(m)
+
+    logger.info("Renamed account '%s' -> '%s'", account, new_name)
+    return jsonify({"status": "ok", "account": account, "name": new_name}), 200
 
 
 # ── Dashboard GET endpoints ─────────────────────────────────────────

@@ -27,12 +27,18 @@
           <select id="account-select">
             <option value="default">default</option>
           </select>
+          <button id="account-rename-btn" data-tooltip="Rename">&#9998;</button>
           <button id="account-create-btn" data-tooltip="New account">+</button>
         </div>
         <div class="account-create-form" id="account-create-form" style="display:none">
           <input type="text" id="account-name-input" placeholder="account-name" maxlength="64" autocomplete="off">
           <button id="account-confirm-btn">Create</button>
           <button id="account-cancel-btn">Cancel</button>
+        </div>
+        <div class="account-create-form" id="account-rename-form" style="display:none">
+          <input type="text" id="account-rename-input" placeholder="Display name" maxlength="64" autocomplete="off">
+          <button id="account-rename-confirm">Save</button>
+          <button id="account-rename-cancel">Cancel</button>
         </div>
       </div>
 

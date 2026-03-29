@@ -50,6 +50,17 @@ const API = {
     }).then(function(r) { if (!r.ok) throw new Error(r.status); return r.json(); })
       .finally(function() { clearTimeout(tid); });
   },
+  accountRename: (account, name) => {
+    const ctrl = new AbortController();
+    const tid = setTimeout(function() { ctrl.abort(); }, 10000);
+    return fetch('/api/accounts/rename', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({account, name}),
+      signal: ctrl.signal,
+    }).then(function(r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+      .finally(function() { clearTimeout(tid); });
+  },
   accountCreate: (account) => {
     const ctrl = new AbortController();
     const tid = setTimeout(function() { ctrl.abort(); }, 10000);

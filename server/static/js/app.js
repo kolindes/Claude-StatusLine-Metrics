@@ -1563,15 +1563,20 @@ async function init() {
   const accounts = await API.accounts().catch(function() { return []; });
   const current = await API.accountCurrent().catch(function() { return {account: 'default'}; });
   const acctSelect = document.getElementById('account-select');
-  if (acctSelect) {
+
+  function populateAccountSelect(accts, selectedId) {
     clearChildren(acctSelect);
-    accounts.forEach(function(a) {
+    accts.forEach(function(a) {
       const opt = document.createElement('option');
-      opt.value = a;
-      opt.textContent = a;
-      if (a === current.account) opt.selected = true;
+      opt.value = a.id || a;
+      opt.textContent = a.name || a.id || a;
+      if ((a.id || a) === selectedId) opt.selected = true;
       acctSelect.appendChild(opt);
     });
+  }
+
+  if (acctSelect) {
+    populateAccountSelect(accounts, current.account);
     acctSelect.addEventListener('change', async function() {
       try {
         await API.accountSwitch(this.value);
@@ -1622,14 +1627,7 @@ async function init() {
       createForm.style.display = 'none';
       nameInput.value = '';
       const accts = await API.accounts().catch(function() { return []; });
-      clearChildren(acctSelect);
-      accts.forEach(function(a) {
-        const opt = document.createElement('option');
-        opt.value = a;
-        opt.textContent = a;
-        if (a === name) opt.selected = true;
-        acctSelect.appendChild(opt);
-      });
+      populateAccountSelect(accts, name);
       state.prevKpi = {};
       state.sessionsPage = 0;
       state.barChartPage = 0;
@@ -1641,6 +1639,56 @@ async function init() {
     nameInput.addEventListener('keydown', function(e) {
       if (e.key === 'Enter') doCreate();
       if (e.key === 'Escape') { createForm.style.display = 'none'; nameInput.value = ''; }
+    });
+  }
+
+  // ── Rename account ───────────────────────────────────────
+  const renameBtn = document.getElementById('account-rename-btn');
+  const renameForm = document.getElementById('account-rename-form');
+  const renameInput = document.getElementById('account-rename-input');
+  const renameConfirm = document.getElementById('account-rename-confirm');
+  const renameCancel = document.getElementById('account-rename-cancel');
+
+  if (renameBtn && renameForm && renameInput) {
+    renameBtn.addEventListener('click', function() {
+      const visible = renameForm.style.display !== 'none';
+      renameForm.style.display = visible ? 'none' : 'flex';
+      createForm.style.display = 'none';
+      if (!visible) {
+        const sel = acctSelect.options[acctSelect.selectedIndex];
+        renameInput.value = sel ? sel.textContent : '';
+        renameInput.focus();
+        renameInput.select();
+      }
+    });
+
+    renameCancel.addEventListener('click', function() {
+      renameForm.style.display = 'none';
+    });
+
+    async function doRename() {
+      const newName = renameInput.value.trim();
+      if (!newName || newName.length > 64) {
+        renameInput.style.borderColor = 'var(--red)';
+        setTimeout(function() { renameInput.style.borderColor = ''; }, 1500);
+        return;
+      }
+      try {
+        await API.accountRename(acctSelect.value, newName);
+      } catch (e) {
+        renameInput.style.borderColor = 'var(--red)';
+        setTimeout(function() { renameInput.style.borderColor = ''; }, 1500);
+        return;
+      }
+      renameForm.style.display = 'none';
+      const accts = await API.accounts().catch(function() { return []; });
+      populateAccountSelect(accts, acctSelect.value);
+    }
+
+    renameConfirm.addEventListener('click', doRename);
+    renameInput.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') doRename();
+      if (e.key === 'Escape') renameForm.style.display = 'none';
     });
   }
 
