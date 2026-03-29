@@ -42,6 +42,7 @@ from server.database import (  # noqa: E402
     get_activity_per_bucket,
     get_all_projects_summary,
     get_burn_rate,
+    get_rate_growth_per_hour,
     get_connection,
     get_context_window_analysis,
     get_db_size,
@@ -432,6 +433,15 @@ def api_burn_rate() -> tuple[Response, int]:
     account = request.args.get("account")
     db = get_db()
     data = get_burn_rate(db, account=account)
+    return jsonify(data), 200
+
+
+@app.route("/api/rate-growth", methods=["GET"])
+def api_rate_growth() -> tuple[Response, int]:
+    """Average rate limit % growth per active hour (last 48h)."""
+    account = request.args.get("account")
+    db = get_db()
+    data = get_rate_growth_per_hour(db, account=account)
     return jsonify(data), 200
 
 

@@ -93,4 +93,8 @@ const API = {
   /** Burn rate (tokens per minute/hour) */
   burnRate: (params) =>
     fetchJSON('/api/burn-rate', params),
+
+  /** Rate growth per active hour (last 48h) */
+  rateGrowth: (params) =>
+    fetchJSON('/api/rate-growth', params),
 };

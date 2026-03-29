@@ -817,6 +817,54 @@ def get_burn_rate(
     }
 
 
+def get_rate_growth_per_hour(
+    conn: sqlite3.Connection, *, account: str | None = None
+) -> dict[str, Any]:
+    """Average rate limit % growth per active hour over the last 48h.
+
+    Only counts hours with >= 2 metric records (need a delta).
+    Ignores inactive hours (night, breaks) to avoid diluting the average.
+    """
+    cutoff = int(time.time()) - 48 * 3600  # last 48 hours
+    acct_clause, acct_params = _account_filter(account)
+    params: list[Any] = [cutoff] + acct_params
+
+    result: dict[str, Any] = {}
+
+    for key, rate_col, resets_col in [
+        ("five_hour", "rate_5h_pct", "rate_5h_resets"),
+        ("seven_day", "rate_7d_pct", "rate_7d_resets"),
+    ]:
+        sql = f"""
+            WITH hourly AS (
+                SELECT
+                    (ts / 3600) AS hour_bucket,
+                    {resets_col} AS resets,
+                    MAX({rate_col}) - MIN({rate_col}) AS delta_pct,
+                    COUNT(*) AS records
+                FROM metrics
+                WHERE ts >= ? {acct_clause}
+                  AND {rate_col} > 0
+                GROUP BY hour_bucket, {resets_col}
+                HAVING COUNT(*) >= 2 AND MAX({rate_col}) - MIN({rate_col}) > 0
+            )
+            SELECT
+                AVG(delta_pct) AS avg_growth,
+                COUNT(*) AS active_hours
+            FROM hourly
+        """
+        row = conn.execute(sql, params).fetchone()
+        avg_growth = round(row["avg_growth"], 2) if row and row["avg_growth"] else 0
+        active_hours = row["active_hours"] if row and row["active_hours"] else 0
+
+        result[key] = {
+            "pct_per_hour": avg_growth,
+            "active_hours": active_hours,
+        }
+
+    return result
+
+
 def get_rate_limits_current(
     conn: sqlite3.Connection, *, account: str | None = None
 ) -> dict[str, Any]:

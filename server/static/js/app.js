@@ -405,12 +405,14 @@ async function loadOverview() {
     API.health().catch(function() { return null; }),
     API.burnRate().catch(function() { return null; }),
     API.activity(activityParams).catch(function() { return []; }),
+    API.rateGrowth().catch(function() { return null; }),
   ]);
   const rateLimits = results[0];
   const sessions = results[1];
   const health = results[2];
   const burn = results[3];
   const activity = results[4];
+  const rateGrowth = results[5];
 
   // If a project is selected, load project-specific data
   let projectSummary = null;
@@ -441,6 +443,16 @@ async function loadOverview() {
 
   // KPI Cards
   updateKpiCards(projectSummary, rateLimits, health, burn);
+
+  // Rate growth per active hour
+  if (rateGrowth) {
+    const g5 = rateGrowth.five_hour || {};
+    const g7 = rateGrowth.seven_day || {};
+    setText('#kpi-growth5h-value', g5.pct_per_hour ? '+' + g5.pct_per_hour.toFixed(1) + '%/hr' : 'idle');
+    setText('#kpi-growth5h-detail', g5.active_hours ? g5.active_hours + ' active hrs (48h)' : 'no activity');
+    setText('#kpi-growth7d-value', g7.pct_per_hour ? '+' + g7.pct_per_hour.toFixed(1) + '%/hr' : 'idle');
+    setText('#kpi-growth7d-detail', g7.active_hours ? g7.active_hours + ' active hrs (48h)' : 'no activity');
+  }
 
   setText('#tokens-chart-title', 'Activity');
 
