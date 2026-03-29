@@ -1573,7 +1573,12 @@ async function init() {
       acctSelect.appendChild(opt);
     });
     acctSelect.addEventListener('change', async function() {
-      await API.accountSwitch(this.value);
+      try {
+        await API.accountSwitch(this.value);
+      } catch (e) {
+        alert('Failed to switch account: ' + e.message);
+        return;
+      }
       state.prevKpi = {};
       state.sessionsPage = 0;
       state.barChartPage = 0;
@@ -1587,9 +1592,11 @@ async function init() {
     createBtn.addEventListener('click', async function() {
       const name = prompt('Account name (lowercase, no spaces):');
       if (!name || !/^[a-z0-9][a-z0-9-]{0,62}$/.test(name)) return;
-      const res = await API.accountCreate(name);
-      if (res && res.error) {
-        alert('Error: ' + res.error);
+      let res;
+      try {
+        res = await API.accountCreate(name);
+      } catch (e) {
+        alert('Failed to create account: ' + e.message);
         return;
       }
       // Refresh accounts list and switch
