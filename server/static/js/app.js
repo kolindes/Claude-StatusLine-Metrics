@@ -1588,19 +1588,40 @@ async function init() {
   }
 
   const createBtn = document.getElementById('account-create-btn');
-  if (createBtn) {
-    createBtn.addEventListener('click', async function() {
-      const name = prompt('Account name (lowercase, no spaces):');
-      if (!name || !/^[a-z0-9][a-z0-9-]{0,62}$/.test(name)) return;
-      let res;
-      try {
-        res = await API.accountCreate(name);
-      } catch (e) {
-        alert('Failed to create account: ' + e.message);
+  const createForm = document.getElementById('account-create-form');
+  const nameInput = document.getElementById('account-name-input');
+  const confirmBtn = document.getElementById('account-confirm-btn');
+  const cancelBtn = document.getElementById('account-cancel-btn');
+
+  if (createBtn && createForm && nameInput && confirmBtn && cancelBtn) {
+    createBtn.addEventListener('click', function() {
+      const visible = createForm.style.display !== 'none';
+      createForm.style.display = visible ? 'none' : 'flex';
+      if (!visible) { nameInput.value = ''; nameInput.focus(); }
+    });
+
+    cancelBtn.addEventListener('click', function() {
+      createForm.style.display = 'none';
+      nameInput.value = '';
+    });
+
+    async function doCreate() {
+      const name = nameInput.value.trim().toLowerCase();
+      if (!name || !/^[a-z0-9][a-z0-9-]{0,62}$/.test(name)) {
+        nameInput.style.borderColor = 'var(--red)';
+        setTimeout(function() { nameInput.style.borderColor = ''; }, 1500);
         return;
       }
-      // Refresh accounts list and switch
-      const accts = await API.accounts();
+      try {
+        await API.accountCreate(name);
+      } catch (e) {
+        nameInput.style.borderColor = 'var(--red)';
+        setTimeout(function() { nameInput.style.borderColor = ''; }, 1500);
+        return;
+      }
+      createForm.style.display = 'none';
+      nameInput.value = '';
+      const accts = await API.accounts().catch(function() { return []; });
       clearChildren(acctSelect);
       accts.forEach(function(a) {
         const opt = document.createElement('option');
@@ -1614,6 +1635,12 @@ async function init() {
       state.barChartPage = 0;
       await loadProjects();
       await refreshData();
+    }
+
+    confirmBtn.addEventListener('click', doCreate);
+    nameInput.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') doCreate();
+      if (e.key === 'Escape') { createForm.style.display = 'none'; nameInput.value = ''; }
     });
   }
 

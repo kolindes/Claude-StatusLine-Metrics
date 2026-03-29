@@ -268,6 +268,9 @@ body::after {
 .sidebar-account {
   padding: 8px 20px;
   border-bottom: 1px solid var(--border);
+}
+
+.account-row {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -290,7 +293,7 @@ body::after {
   outline: none;
 }
 
-.sidebar-account button {
+.account-row > button {
   background: var(--bg-hover);
   border: 1px solid var(--border);
   color: var(--primary);
@@ -302,11 +305,67 @@ body::after {
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
 }
 
-.sidebar-account button:hover {
+.account-row > button:hover {
   border-color: var(--primary);
   background: var(--bg-card);
+}
+
+.account-create-form {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  animation: fadeIn 0.2s ease forwards;
+}
+
+.account-create-form input {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  padding: 5px 8px;
+  outline: none;
+  clip-path: var(--clip-button);
+}
+
+.account-create-form input:focus {
+  border-color: var(--primary);
+}
+
+.account-create-form input::placeholder {
+  color: var(--text-muted);
+}
+
+.account-create-form button {
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  padding: 4px 8px;
+  cursor: pointer;
+  clip-path: var(--clip-button);
+  white-space: nowrap;
+}
+
+.account-create-form #account-confirm-btn {
+  color: var(--primary);
+  border-color: rgba(255, 140, 0, 0.3);
+}
+
+.account-create-form #account-confirm-btn:hover {
+  background: var(--bg-card);
+  border-color: var(--primary);
+}
+
+.account-create-form #account-cancel-btn:hover {
+  border-color: var(--text-muted);
 }
 
 .sidebar-nav {
