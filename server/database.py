@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import os
+import shutil
 import sqlite3
 import time
 from pathlib import Path
@@ -236,8 +237,6 @@ def init_db(conn: sqlite3.Connection | None = None) -> sqlite3.Connection:
             conn.close()
             # Backup corrupted DB
             backup_path = db_path.with_suffix(".db.corrupted")
-            import shutil
-
             shutil.move(str(db_path), str(backup_path))
             # Also remove WAL and SHM files from corrupted DB
             for suffix in ["-wal", "-shm"]:

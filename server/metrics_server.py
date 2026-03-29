@@ -13,6 +13,7 @@ Usage::
 from __future__ import annotations
 
 import hmac
+import json
 import logging
 import re
 import sqlite3
@@ -114,15 +115,13 @@ def _load_accounts_map() -> dict[str, str]:
     p = _accounts_map_path()
     if p.exists():
         try:
-            import json
             return json.loads(p.read_text())
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("accounts.json parse error: %s", exc)
     return {}
 
 
 def _save_accounts_map(m: dict[str, str]) -> None:
-    import json
     _accounts_map_path().write_text(json.dumps(m, indent=2))
 
 
@@ -398,13 +397,21 @@ def api_accounts_rename() -> tuple[Response, int]:
         return jsonify({"error": "missing 'account' and 'name' fields"}), 400
 
     account = data["account"]
+    # Validate account key exists
+    known_ids = [a["id"] for a in list_accounts()]
+    if account not in known_ids:
+        return jsonify({"error": f"account '{account}' not found"}), 404
+
     new_name = data["name"].strip()
     if not new_name or len(new_name) > 64:
         return jsonify({"error": "name must be 1-64 characters"}), 400
+    # Strip HTML to prevent stored XSS
+    new_name = re.sub(r"<[^>]*>", "", new_name)
 
-    m = _load_accounts_map()
-    m[account] = new_name
-    _save_accounts_map(m)
+    with _account_lock:
+        m = _load_accounts_map()
+        m[account] = new_name
+        _save_accounts_map(m)
 
     logger.info("Renamed account '%s' -> '%s'", account, new_name)
     return jsonify({"status": "ok", "account": account, "name": new_name}), 200
