@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import hmac
 import logging
+import re
 import sqlite3
 import sys
 import threading
@@ -60,6 +61,7 @@ from server.database import (  # noqa: E402
     init_db,
     insert_metric,
     map_keys,
+    migrate,
     predict_exhaustion,
 )
 from server.ingest import ingest_pending  # noqa: E402
@@ -83,6 +85,35 @@ app = Flask(
 
 _START_TIME: float = time.time()
 _last_rate_window_ts: float = 0
+
+# ── Multi-account state ─────────────────────────────────────────────
+
+_current_account: str = "default"
+_account_lock = threading.Lock()
+
+
+def get_db_path(account: str = "default") -> str:
+    """Return the database file path for the given account.
+
+    ``default`` -> the base DB_PATH from config.
+    Any other name  -> ``statusline-metrics-<name>.db`` in the same dir.
+    """
+    base = Path(config.DB_PATH).expanduser()
+    if account == "default":
+        return str(base)
+    return str(base.with_name(f"statusline-metrics-{account}.db"))
+
+
+def list_accounts() -> list[str]:
+    """Discover all account DB files on disk."""
+    base = Path(config.DB_PATH).expanduser()
+    parent = base.parent
+    accounts = ["default"]
+    for f in sorted(parent.glob("statusline-metrics-*.db")):
+        name = f.stem.replace("statusline-metrics-", "")
+        if name and name not in accounts:
+            accounts.append(name)
+    return accounts
 
 # Required fields for POST /api/metrics
 _REQUIRED_FIELDS: list[str] = ["ts", "sid", "pid", "pname", "ppath", "host", "model"]
@@ -128,9 +159,17 @@ def _cleanup_rate_limit_store() -> None:
 
 
 def get_db() -> sqlite3.Connection:
-    """Return a thread-local database connection (stored in Flask ``g``)."""
-    if "db" not in g:
-        g.db = get_connection()
+    """Return a per-request database connection for the active account."""
+    with _account_lock:
+        acct = _current_account
+    db_path = get_db_path(acct)
+    # If account changed mid-request pool, close old conn and open new one
+    if "db" not in g or g.get("_db_account") != acct:
+        old = g.pop("db", None)
+        if old is not None:
+            old.close()
+        g.db = get_connection(db_path)
+        g._db_account = acct
     return g.db
 
 
@@ -190,10 +229,15 @@ def health() -> tuple[Response, int]:
     db = get_db()
     pending_path = Path(config.PENDING_JSONL).expanduser()
 
+    with _account_lock:
+        acct = _current_account
+    db_path_str = get_db_path(acct)
+
     payload: dict[str, Any] = {
         "status": "ok",
+        "account": acct,
         "uptime_seconds": int(time.time() - _START_TIME),
-        "db_size_bytes": get_db_size(),
+        "db_size_bytes": get_db_size(db_path_str),
         "total_records": get_total_records(db),
         "active_sessions": get_active_sessions(db),
         "pending_jsonl_exists": pending_path.exists(),
@@ -239,6 +283,84 @@ def _handle_receive_metric() -> tuple[Response, int]:
         return jsonify({"error": "database error"}), 500
 
     return jsonify({"status": "ok"}), 200
+
+
+# ── Account management endpoints ────────────────────────────────────
+
+
+@app.route("/api/accounts", methods=["GET"])
+def api_accounts() -> tuple[Response, int]:
+    """List all discovered account names."""
+    return jsonify(list_accounts()), 200
+
+
+@app.route("/api/accounts/current", methods=["GET"])
+def api_accounts_current() -> tuple[Response, int]:
+    """Return the currently active account name."""
+    with _account_lock:
+        acct = _current_account
+    return jsonify({"account": acct}), 200
+
+
+@app.route("/api/accounts/switch", methods=["POST"])
+def api_accounts_switch() -> tuple[Response, int]:
+    """Switch the active account (all subsequent reads/writes use it)."""
+    global _current_account
+    data = request.get_json(silent=True)
+    if not data or "account" not in data:
+        return jsonify({"error": "missing 'account' field"}), 400
+
+    account = data["account"]
+    if not isinstance(account, str) or not account:
+        return jsonify({"error": "account must be a non-empty string"}), 400
+
+    db_path = get_db_path(account)
+    # Ensure the DB exists and is initialised
+    conn = get_connection(db_path)
+    try:
+        migrate(conn)
+    finally:
+        conn.close()
+
+    with _account_lock:
+        _current_account = account
+
+    logger.info("Switched to account '%s' (db: %s)", account, db_path)
+    return jsonify({"status": "ok", "account": account}), 200
+
+
+@app.route("/api/accounts/create", methods=["POST"])
+def api_accounts_create() -> tuple[Response, int]:
+    """Create a new account database and switch to it."""
+    global _current_account
+    data = request.get_json(silent=True)
+    if not data or "account" not in data:
+        return jsonify({"error": "missing 'account' field"}), 400
+
+    account = data["account"]
+    if not isinstance(account, str) or not account:
+        return jsonify({"error": "account must be a non-empty string"}), 400
+
+    # Validate name: lowercase alphanumeric + hyphens
+    if not re.match(r"^[a-z0-9][a-z0-9-]*$", account):
+        return jsonify({"error": "invalid name (lowercase a-z, 0-9, hyphens)"}), 400
+
+    db_path = get_db_path(account)
+    if Path(db_path).exists():
+        return jsonify({"error": f"account '{account}' already exists"}), 409
+
+    # Create and initialise the new DB
+    conn = get_connection(db_path)
+    try:
+        migrate(conn)
+    finally:
+        conn.close()
+
+    with _account_lock:
+        _current_account = account
+
+    logger.info("Created account '%s' (db: %s)", account, db_path)
+    return jsonify({"status": "ok", "account": account}), 200
 
 
 # ── Dashboard GET endpoints ─────────────────────────────────────────
@@ -471,8 +593,11 @@ class _BackgroundScheduler(threading.Thread):
             now = time.time()
 
             if now - last_ingest >= ingest_interval:
+                with _account_lock:
+                    acct = _current_account
+                db_path = get_db_path(acct)
                 try:
-                    conn = get_connection()
+                    conn = get_connection(db_path)
                     try:
                         ingest_pending(conn)
                     finally:
@@ -484,8 +609,11 @@ class _BackgroundScheduler(threading.Thread):
                 last_ingest = now
 
             if now - last_cleanup >= cleanup_interval:
+                with _account_lock:
+                    acct = _current_account
+                db_path = get_db_path(acct)
                 try:
-                    conn = get_connection()
+                    conn = get_connection(db_path)
                     try:
                         cleanup(conn)
                         compute_rate_windows(conn)

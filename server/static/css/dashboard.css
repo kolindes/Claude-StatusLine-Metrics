@@ -264,6 +264,51 @@ body::after {
   text-align: center;
 }
 
+/* ── Account selector ───────────────────────────────────── */
+.sidebar-account {
+  padding: 8px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sidebar-account select {
+  flex: 1;
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  padding: 4px 8px;
+  clip-path: var(--clip-button);
+  cursor: pointer;
+}
+
+.sidebar-account select:focus {
+  border-color: var(--primary);
+  outline: none;
+}
+
+.sidebar-account button {
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  color: var(--primary);
+  font-size: 0.9rem;
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+  clip-path: var(--clip-button);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sidebar-account button:hover {
+  border-color: var(--primary);
+  background: var(--bg-card);
+}
+
 .sidebar-nav {
   padding: 16px 0;
   border-bottom: 1px solid var(--border);

@@ -36,6 +36,20 @@ const API = {
   /** Health check */
   health: () => fetchJSON('/api/health'),
 
+  /** Account management */
+  accounts: () => fetchJSON('/api/accounts'),
+  accountCurrent: () => fetchJSON('/api/accounts/current'),
+  accountSwitch: (account) => fetch('/api/accounts/switch', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({account})
+  }).then(function(r) { return r.json(); }),
+  accountCreate: (account) => fetch('/api/accounts/create', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({account})
+  }).then(function(r) { return r.json(); }),
+
   /** List all projects */
   projects: (account) => fetchJSON('/api/projects', { account }),
 

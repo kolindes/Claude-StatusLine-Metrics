@@ -1559,6 +1559,57 @@ async function init() {
     }
   });
 
+  // ── Account selector ─────────────────────────────────────────
+  const accounts = await API.accounts().catch(function() { return []; });
+  const current = await API.accountCurrent().catch(function() { return {account: 'default'}; });
+  const acctSelect = document.getElementById('account-select');
+  if (acctSelect) {
+    acctSelect.innerHTML = '';
+    accounts.forEach(function(a) {
+      var opt = document.createElement('option');
+      opt.value = a;
+      opt.textContent = a;
+      if (a === current.account) opt.selected = true;
+      acctSelect.appendChild(opt);
+    });
+    acctSelect.addEventListener('change', async function() {
+      await API.accountSwitch(this.value);
+      state.prevKpi = {};
+      state.sessionsPage = 0;
+      state.barChartPage = 0;
+      await loadProjects();
+      await refreshData();
+    });
+  }
+
+  var createBtn = document.getElementById('account-create-btn');
+  if (createBtn) {
+    createBtn.addEventListener('click', async function() {
+      var name = prompt('Account name (lowercase, no spaces):');
+      if (!name || !/^[a-z0-9][a-z0-9-]*$/.test(name)) return;
+      var res = await API.accountCreate(name);
+      if (res && res.error) {
+        alert('Error: ' + res.error);
+        return;
+      }
+      // Refresh accounts list and switch
+      var accts = await API.accounts();
+      acctSelect.innerHTML = '';
+      accts.forEach(function(a) {
+        var opt = document.createElement('option');
+        opt.value = a;
+        opt.textContent = a;
+        if (a === name) opt.selected = true;
+        acctSelect.appendChild(opt);
+      });
+      state.prevKpi = {};
+      state.sessionsPage = 0;
+      state.barChartPage = 0;
+      await loadProjects();
+      await refreshData();
+    });
+  }
+
   // Initial load
   await loadProjects();
 

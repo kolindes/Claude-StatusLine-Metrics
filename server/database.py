@@ -438,10 +438,10 @@ def get_active_sessions(conn: sqlite3.Connection) -> int:
     return row[0]
 
 
-def get_db_size() -> int:
+def get_db_size(db_path: str | None = None) -> int:
     """Return database file size in bytes."""
     try:
-        return os.path.getsize(config.DB_PATH)
+        return os.path.getsize(db_path or config.DB_PATH)
     except OSError:
         return 0
 
