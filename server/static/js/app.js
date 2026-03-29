@@ -697,7 +697,7 @@ function getSessionMetrics(s) {
 }
 
 function renderSessionsTable(sessions) {
-  var tbody = $('#sessions-tbody');
+  const tbody = $('#sessions-tbody');
   if (!tbody) return;
 
   // Cache sessions for pagination re-render
@@ -712,63 +712,63 @@ function renderSessionsTable(sessions) {
   }
 
   // Group sessions by project_name
-  var nowTs = Math.floor(Date.now() / 1000);
-  var grouped = {};
+  const nowTs = Math.floor(Date.now() / 1000);
+  const grouped = {};
   sessions.forEach(function(s) {
-    var name = s.project_name || 'unknown';
+    const name = s.project_name || 'unknown';
     if (!grouped[name]) {
       grouped[name] = { project_name: name, model: s.model, sessions: 0, duration: 0, tokens: 0, cost: 0, last_seen_at: 0, has_active: false };
     }
-    var g = grouped[name];
+    const g = grouped[name];
     g.sessions++;
-    var m = getSessionMetrics(s);
+    const m = getSessionMetrics(s);
     g.duration += m.duration;
     g.tokens += m.tokens;
     g.cost += m.cost;
     if (s.last_seen_at > g.last_seen_at) { g.last_seen_at = s.last_seen_at; g.model = s.model; }
-    var seenDiff = s.last_seen_at ? (nowTs - s.last_seen_at) : Infinity;
+    const seenDiff = s.last_seen_at ? (nowTs - s.last_seen_at) : Infinity;
     if (seenDiff < 300) g.has_active = true;
   });
 
   // Sort ALL projects by cost descending
-  var projects = Object.values(grouped);
+  const projects = Object.values(grouped);
   projects.sort(function(a, b) { return b.cost - a.cost; });
 
   // Pagination: slice projects for current page
-  var perPage = state.sessionsPerPage;
-  var totalPages = Math.ceil(projects.length / perPage);
+  const perPage = state.sessionsPerPage;
+  const totalPages = Math.ceil(projects.length / perPage);
   if (state.sessionsPage >= totalPages) state.sessionsPage = Math.max(0, totalPages - 1);
-  var pageStart = state.sessionsPage * perPage;
-  var pageProjects = projects.slice(pageStart, pageStart + perPage);
+  const pageStart = state.sessionsPage * perPage;
+  const pageProjects = projects.slice(pageStart, pageStart + perPage);
 
   // Render only current page of projects
   pageProjects.forEach(function(p) {
-    var tr = document.createElement('tr');
+    const tr = document.createElement('tr');
 
-    var tdProj = document.createElement('td');
-    var dot = document.createElement('span');
+    const tdProj = document.createElement('td');
+    const dot = document.createElement('span');
     dot.className = 'status-dot ' + (p.has_active ? 'active' : 'idle');
     tdProj.appendChild(dot);
-    var label = truncate(p.project_name, 20);
+    let label = truncate(p.project_name, 20);
     if (p.sessions > 1) label += ' (' + p.sessions + ')';
     tdProj.appendChild(document.createTextNode(label));
     tr.appendChild(tdProj);
 
-    var tdModel = document.createElement('td');
+    const tdModel = document.createElement('td');
     tdModel.textContent = p.model || '--';
     tr.appendChild(tdModel);
 
-    var tdDur = document.createElement('td');
+    const tdDur = document.createElement('td');
     tdDur.className = 'cell-right';
     tdDur.textContent = fmtDur(p.duration, 's');
     tr.appendChild(tdDur);
 
-    var tdTok = document.createElement('td');
+    const tdTok = document.createElement('td');
     tdTok.className = 'cell-right';
     tdTok.textContent = fmtTokens(p.tokens);
     tr.appendChild(tdTok);
 
-    var tdCost = document.createElement('td');
+    const tdCost = document.createElement('td');
     tdCost.className = 'cell-right';
     tdCost.textContent = fmtCost(p.cost);
     tr.appendChild(tdCost);
@@ -777,28 +777,28 @@ function renderSessionsTable(sessions) {
   });
 
   // TOTAL row -- always calculated from ALL sessions/projects
-  var totalTokens = 0, totalCost = 0, totalDur = 0;
+  let totalTokens = 0, totalCost = 0, totalDur = 0;
   sessions.forEach(function(s) {
-    var m = getSessionMetrics(s);
+    const m = getSessionMetrics(s);
     totalTokens += m.tokens;
     totalCost += m.cost;
     totalDur += m.duration;
   });
-  var tfoot = document.createElement('tr');
+  const tfoot = document.createElement('tr');
   tfoot.className = 'sessions-total';
-  var tfLabel = document.createElement('td');
+  const tfLabel = document.createElement('td');
   tfLabel.colSpan = 2;
   tfLabel.textContent = 'TOTAL (' + plural(sessions.length, 'session', 'sessions') + ', ' + projects.length + ' projects)';
   tfoot.appendChild(tfLabel);
-  var tfDur = document.createElement('td');
+  const tfDur = document.createElement('td');
   tfDur.className = 'cell-right';
   tfDur.textContent = fmtDur(totalDur, 's');
   tfoot.appendChild(tfDur);
-  var tfTok = document.createElement('td');
+  const tfTok = document.createElement('td');
   tfTok.className = 'cell-right';
   tfTok.textContent = fmtTokens(totalTokens);
   tfoot.appendChild(tfTok);
-  var tfCost = document.createElement('td');
+  const tfCost = document.createElement('td');
   tfCost.className = 'cell-right';
   tfCost.textContent = fmtCost(totalCost);
   tfoot.appendChild(tfCost);
@@ -806,12 +806,12 @@ function renderSessionsTable(sessions) {
 
   // Pagination controls (only if more than 1 page)
   if (totalPages > 1) {
-    var paginationRow = document.createElement('tr');
-    var paginationTd = document.createElement('td');
+    const paginationRow = document.createElement('tr');
+    const paginationTd = document.createElement('td');
     paginationTd.colSpan = 5;
     paginationTd.className = 'sessions-pagination';
 
-    var prevBtn = document.createElement('button');
+    const prevBtn = document.createElement('button');
     prevBtn.textContent = '\u2190 Prev';
     prevBtn.disabled = state.sessionsPage === 0;
     prevBtn.addEventListener('click', function() {
@@ -819,10 +819,10 @@ function renderSessionsTable(sessions) {
       renderSessionsTable(state._lastSessions);
     });
 
-    var info = document.createElement('span');
+    const info = document.createElement('span');
     info.textContent = 'Page ' + (state.sessionsPage + 1) + ' of ' + totalPages;
 
-    var nextBtn = document.createElement('button');
+    const nextBtn = document.createElement('button');
     nextBtn.textContent = 'Next \u2192';
     nextBtn.disabled = state.sessionsPage >= totalPages - 1;
     nextBtn.addEventListener('click', function() {
