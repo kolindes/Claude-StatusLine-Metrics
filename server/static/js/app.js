@@ -22,6 +22,9 @@ const state = {
   sessionsPage: 0,            // current page in sessions table
   sessionsPerPage: 10,        // projects per page after grouping
   _lastSessions: null,        // cached sessions for pagination re-render
+  barChartPage: 0,            // current page in bar chart
+  _barChartSummaries: null,
+  _barChartProjects: null,
 };
 
 const GITHUB_REPO = 'kolindes/Claude-StatusLine-Metrics';
@@ -294,6 +297,7 @@ function selectProject(projectId) {
   state.currentProject = projectId;
   state.prevKpi = {};
   state.sessionsPage = 0;
+  state.barChartPage = 0;
 
   // Update sidebar active
   $$('.sidebar-projects a').forEach(function(a) {
@@ -627,14 +631,20 @@ function updateProjectsBarChart(summaries, projectsList) {
   // Sort by tokens descending
   const indices = data.map(function(_, i) { return i; });
   indices.sort(function(a, b) { return data[b] - data[a]; });
-  let sortedLabels = indices.map(function(i) { return labels[i]; });
-  let sortedData = indices.map(function(i) { return data[i]; });
+  const allLabels = indices.map(function(i) { return labels[i]; });
+  const allData = indices.map(function(i) { return data[i]; });
 
-  // Limit to top 15 projects for readability
-  if (sortedLabels.length > 15) {
-    sortedLabels = sortedLabels.slice(0, 15);
-    sortedData = sortedData.slice(0, 15);
-  }
+  // Paginate: 10 projects per page
+  const perPage = 10;
+  const totalPages = Math.ceil(allLabels.length / perPage);
+  if (state.barChartPage >= totalPages) state.barChartPage = 0;
+  const start = state.barChartPage * perPage;
+  const sortedLabels = allLabels.slice(start, start + perPage);
+  const sortedData = allData.slice(start, start + perPage);
+
+  // Store for re-render on page change
+  state._barChartSummaries = summaries;
+  state._barChartProjects = projectsList;
 
   const empty = sortedData.length === 0;
   setChartEmpty('chart-breakdown', empty);
@@ -642,6 +652,40 @@ function updateProjectsBarChart(summaries, projectsList) {
   chart.data.labels = sortedLabels;
   chart.data.datasets[0].data = sortedData;
   chart.update();
+
+  // Pagination controls
+  const container = document.getElementById('chart-breakdown');
+  if (container) {
+    const parent = container.closest('.chart-container');
+    if (parent) {
+      let pag = parent.querySelector('.bar-pagination');
+      if (pag) pag.remove();
+      if (totalPages > 1) {
+        pag = document.createElement('div');
+        pag.className = 'bar-pagination sessions-pagination';
+        const prevBtn = document.createElement('button');
+        prevBtn.textContent = '← Prev';
+        prevBtn.disabled = state.barChartPage === 0;
+        prevBtn.addEventListener('click', function() {
+          state.barChartPage--;
+          updateProjectsBarChart(state._barChartSummaries, state._barChartProjects);
+        });
+        const info = document.createElement('span');
+        info.textContent = (state.barChartPage + 1) + ' / ' + totalPages;
+        const nextBtn = document.createElement('button');
+        nextBtn.textContent = 'Next →';
+        nextBtn.disabled = state.barChartPage >= totalPages - 1;
+        nextBtn.addEventListener('click', function() {
+          state.barChartPage++;
+          updateProjectsBarChart(state._barChartSummaries, state._barChartProjects);
+        });
+        pag.appendChild(prevBtn);
+        pag.appendChild(info);
+        pag.appendChild(nextBtn);
+        parent.appendChild(pag);
+      }
+    }
+  }
 }
 
 function getSessionMetrics(s) {
@@ -1415,6 +1459,7 @@ function setupTimeFilter() {
       state.timeRange = btn.dataset.range;
       state.prevKpi = {};
       state.sessionsPage = 0;
+  state.barChartPage = 0;
       localStorage.setItem('sm_timeRange', btn.dataset.range);
       $$('.time-filter-bar button[data-range]').forEach(function(b) {
         b.classList.toggle('active', b === btn);

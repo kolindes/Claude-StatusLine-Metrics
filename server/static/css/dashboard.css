@@ -830,10 +830,29 @@ body::after {
   grid-template-columns: 1fr 1.3fr;
   gap: 16px;
   margin-bottom: 24px;
+  align-items: stretch;
+}
+
+.charts-row > .chart-container,
+.charts-row > .table-container {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.charts-row > .chart-container canvas {
+  flex: 1;
+  min-height: 0;
+}
+
+.chart-container.chart-bar-projects {
+  display: flex;
+  flex-direction: column;
 }
 
 .chart-container.chart-bar-projects canvas {
-  max-height: 280px;
+  flex: 1;
+  min-height: 200px;
 }
 
 /* ── Progress Bars (Rate Limits) -- Power Bar Style ──────────── */
