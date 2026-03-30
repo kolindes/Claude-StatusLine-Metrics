@@ -879,7 +879,7 @@ def get_rate_limits_current(
             rate_7d_resets,
             ts
         FROM metrics
-        WHERE 1=1 {acct_clause}
+        WHERE (rate_5h_pct > 0 OR rate_7d_pct > 0) {acct_clause}
         ORDER BY ts DESC
         LIMIT 1
     """
