@@ -1394,14 +1394,25 @@ def get_rate_estimates(
     if window_type not in ("5h", "7d"):
         window_type = "5h"
 
-    # Try completed windows first (last 90 days)
+    # Try completed windows with meaningful usage (>= 30% consumed)
+    # Windows with low rate% produce wildly inaccurate cap extrapolations
     rows = conn.execute("""
         SELECT estimated_cap_output, estimated_cap_input, estimated_cap_all
         FROM rate_windows
-        WHERE window_type = ? AND is_complete = 1
+        WHERE window_type = ? AND is_complete = 1 AND final_rate_pct >= 30
         ORDER BY resets_at DESC
         LIMIT 100
     """, (window_type,)).fetchall()
+
+    if len(rows) < 1:
+        # Relax: try any completed window with >= 10%
+        rows = conn.execute("""
+            SELECT estimated_cap_output, estimated_cap_input, estimated_cap_all
+            FROM rate_windows
+            WHERE window_type = ? AND is_complete = 1 AND final_rate_pct >= 10
+            ORDER BY resets_at DESC
+            LIMIT 100
+        """, (window_type,)).fetchall()
 
     if len(rows) < 1:
         # Fallback: include current incomplete window if rate% is meaningful
