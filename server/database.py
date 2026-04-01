@@ -1432,8 +1432,10 @@ def get_rate_estimates(
     # Require minimum 5 samples per type. Normalize MAD by median to compare fairly.
     best_type = "all"  # default fallback
     best_score = float("inf")
+    # Only consider output and all (in+out). Input-only is not how
+    # Anthropic calculates rate limits, and sparse input data causes
+    # self-calibration to incorrectly prefer it.
     for ttype, col in [("output", "estimated_cap_output"),
-                        ("input", "estimated_cap_input"),
                         ("all", "estimated_cap_all")]:
         vals = [r[col] for r in rows if r[col] is not None]
         if len(vals) >= 5:
