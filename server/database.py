@@ -1417,21 +1417,25 @@ def get_rate_estimates(
         return {"window": window_type, "avg": None, "min": None, "max": None,
                 "median": None, "samples": 0, "token_type": None}
 
-    # Self-calibrate: pick token type with lowest MAD (median absolute deviation)
-    best_type = "all"
-    best_mad = float("inf")
+    # Self-calibrate: pick token type with lowest normalized MAD
+    # Require minimum 5 samples per type. Normalize MAD by median to compare fairly.
+    best_type = "all"  # default fallback
+    best_score = float("inf")
     for ttype, col in [("output", "estimated_cap_output"),
                         ("input", "estimated_cap_input"),
                         ("all", "estimated_cap_all")]:
         vals = [r[col] for r in rows if r[col] is not None]
-        if len(vals) >= 3:
+        if len(vals) >= 5:
             med = sorted(vals)[len(vals) // 2]
-            mad = sum(abs(v - med) for v in vals) / len(vals)
-            if mad < best_mad:
-                best_mad = mad
-                best_type = ttype
-        elif len(vals) >= 1 and best_mad == float("inf"):
-            best_type = ttype  # fallback to whatever has data
+            if med > 0:
+                mad = sum(abs(v - med) for v in vals) / len(vals)
+                normalized = mad / med  # coefficient of MAD — comparable across scales
+                if normalized < best_score:
+                    best_score = normalized
+                    best_type = ttype
+        elif len(vals) >= 1 and best_score == float("inf"):
+            # Fallback: if no type has 5+ samples, use whatever has most data
+            best_type = ttype
 
     col = f"estimated_cap_{best_type}"
     caps = [r[col] for r in rows if r[col] is not None]
