@@ -18,6 +18,10 @@ from server import config
 
 logger = logging.getLogger("metrics.database")
 
+# Filter clause for excluding cross-account anomalous records.
+# Used in all analytical queries. COALESCE handles NULL (pre-migration rows).
+_NO_ANOMALY = "COALESCE(anomaly, 0) = 0"
+
 # ── Short-key to full-column mapping ────────────────────────────────
 
 KEY_MAP: dict[str, str] = {
@@ -195,6 +199,14 @@ MIGRATIONS: list[tuple[int, str, str]] = [
         DROP TABLE IF EXISTS rate_estimates;
         DROP INDEX IF EXISTS idx_rate_est_window_ts;
     """),
+    (4, "Add anomaly detection", """
+        CREATE TABLE IF NOT EXISTS account_fingerprint (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        );
+    """),
+    # NOTE: anomaly column added separately in migrate() with try/except
+    # because ALTER TABLE ADD COLUMN is not idempotent in SQLite
 ]
 
 # ── Connection helpers ───────────────────────────────────────────────
@@ -278,7 +290,13 @@ def migrate(conn: sqlite3.Connection) -> None:
                 (version, int(time.time()), desc),
             )
             conn.commit()
-            logger.info("Applied migration %d: %s", version, desc)
+
+    # Add anomaly column (idempotent — safe to re-run)
+    try:
+        conn.execute("ALTER TABLE metrics ADD COLUMN anomaly INTEGER DEFAULT 0")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass  # Column already exists
 
 
 # ── Insert ───────────────────────────────────────────────────────────
@@ -295,6 +313,81 @@ def map_keys(record: dict[str, Any]) -> dict[str, Any]:
     return mapped
 
 
+def _check_anomaly(conn: sqlite3.Connection, record: dict[str, Any]) -> int:
+    """Check if record belongs to a different account (cross-account pollution).
+
+    Returns 1 if anomaly detected, 0 if OK.
+
+    Primary check: rate_7d_resets mismatch against stored fingerprint.
+    Secondary check: sudden rate% drop within the same session.
+    """
+    try:
+        return _check_anomaly_impl(conn, record)
+    except sqlite3.OperationalError:
+        # Graceful degradation if migration incomplete (table/column missing)
+        return 0
+
+
+def _check_anomaly_impl(conn: sqlite3.Connection, record: dict[str, Any]) -> int:
+    """Internal implementation of anomaly check."""
+    rate_7d_resets = record.get("rate_7d_resets", 0)
+    rate_5h_pct = record.get("rate_5h_pct", 0)
+
+    # Skip records with no rate data
+    if rate_7d_resets == 0:
+        return 0
+
+    # ── Primary check: rate_7d_resets fingerprint ───────────────
+    fp_row = conn.execute(
+        "SELECT value FROM account_fingerprint WHERE key = 'rate_7d_resets'"
+    ).fetchone()
+
+    if fp_row is None:
+        # First record with rate data -- set fingerprint
+        conn.execute(
+            "INSERT OR REPLACE INTO account_fingerprint (key, value) VALUES ('rate_7d_resets', ?)",
+            (str(rate_7d_resets),),
+        )
+        conn.commit()
+        return 0
+
+    expected = int(fp_row[0])
+
+    if rate_7d_resets != expected:
+        # Check if this is a legitimate 7d reset (new window)
+        rate_7d_pct = record.get("rate_7d_pct", 0)
+        if rate_7d_resets > expected and rate_7d_pct < 5:
+            # Legitimate reset -- update fingerprint
+            conn.execute(
+                "UPDATE account_fingerprint SET value = ? WHERE key = 'rate_7d_resets'",
+                (str(rate_7d_resets),),
+            )
+            conn.commit()
+            return 0
+        else:
+            # Different account's data
+            return 1
+
+    # ── Secondary check: sudden rate% drop within same session ──
+    session_id = record.get("session_id", "")
+    if session_id:
+        # Skip the record we just inserted (it's the latest row)
+        prev = conn.execute(
+            f"SELECT rate_5h_pct, rate_7d_pct FROM metrics "
+            f"WHERE session_id = ? AND {_NO_ANOMALY} "
+            f"AND id != last_insert_rowid() ORDER BY ts DESC LIMIT 1",
+            (session_id,),
+        ).fetchone()
+        if prev:
+            prev_5h = prev[0] or 0
+            prev_7d = prev[1] or 0
+            # Drop > 15% without resets_at change = anomaly
+            if (prev_5h - rate_5h_pct > 15) or (prev_7d - record.get("rate_7d_pct", 0) > 15):
+                return 1
+
+    return 0
+
+
 def insert_metric(
     conn: sqlite3.Connection, record: dict[str, Any], *, commit: bool = True
 ) -> None:
@@ -302,6 +395,9 @@ def insert_metric(
 
     When *commit* is False the caller is responsible for committing the
     transaction (useful for batch inserts).
+
+    Anomalous records (cross-account data pollution) are flagged but
+    still stored -- the sessions table is NOT updated for them.
     """
     rec = map_keys(record)
 
@@ -347,40 +443,47 @@ def insert_metric(
         rec,
     )
 
-    # ── UPSERT into sessions ────────────────────────────────────
-    conn.execute(
-        """
-        INSERT INTO sessions (
-            session_id, project_id, project_name, host, account, model,
-            started_at, last_seen_at,
-            max_ctx_pct, max_tokens_in, max_tokens_out,
-            max_cost_usd, max_duration_ms,
-            last_tokens_in, last_tokens_out,
-            last_cache_write, last_cache_read
-        ) VALUES (
-            :session_id, :project_id, :project_name, :host, :account, :model,
-            :ts, :ts,
-            :ctx_pct, :tokens_in, :tokens_out,
-            :cost_usd, :duration_ms,
-            :tokens_in, :tokens_out,
-            :cache_write, :cache_read
+    # ── Check for cross-account anomaly ─────────────────────────
+    anomaly = _check_anomaly(conn, rec)
+    if anomaly:
+        conn.execute(
+            "UPDATE metrics SET anomaly = 1 WHERE id = last_insert_rowid()"
         )
-        ON CONFLICT(session_id) DO UPDATE SET
-            last_seen_at    = MAX(sessions.last_seen_at, excluded.last_seen_at),
-            model           = excluded.model,
-            account         = excluded.account,
-            max_ctx_pct     = MAX(sessions.max_ctx_pct, excluded.max_ctx_pct),
-            max_tokens_in   = MAX(sessions.max_tokens_in, excluded.max_tokens_in),
-            max_tokens_out  = MAX(sessions.max_tokens_out, excluded.max_tokens_out),
-            max_cost_usd    = MAX(sessions.max_cost_usd, excluded.max_cost_usd),
-            max_duration_ms = MAX(sessions.max_duration_ms, excluded.max_duration_ms),
-            last_tokens_in  = excluded.last_tokens_in,
-            last_tokens_out = excluded.last_tokens_out,
-            last_cache_write = excluded.last_cache_write,
-            last_cache_read  = excluded.last_cache_read
-        """,
-        rec,
-    )
+    else:
+        # ── UPSERT into sessions (only for non-anomalous data) ──
+        conn.execute(
+            """
+            INSERT INTO sessions (
+                session_id, project_id, project_name, host, account, model,
+                started_at, last_seen_at,
+                max_ctx_pct, max_tokens_in, max_tokens_out,
+                max_cost_usd, max_duration_ms,
+                last_tokens_in, last_tokens_out,
+                last_cache_write, last_cache_read
+            ) VALUES (
+                :session_id, :project_id, :project_name, :host, :account, :model,
+                :ts, :ts,
+                :ctx_pct, :tokens_in, :tokens_out,
+                :cost_usd, :duration_ms,
+                :tokens_in, :tokens_out,
+                :cache_write, :cache_read
+            )
+            ON CONFLICT(session_id) DO UPDATE SET
+                last_seen_at    = MAX(sessions.last_seen_at, excluded.last_seen_at),
+                model           = excluded.model,
+                account         = excluded.account,
+                max_ctx_pct     = MAX(sessions.max_ctx_pct, excluded.max_ctx_pct),
+                max_tokens_in   = MAX(sessions.max_tokens_in, excluded.max_tokens_in),
+                max_tokens_out  = MAX(sessions.max_tokens_out, excluded.max_tokens_out),
+                max_cost_usd    = MAX(sessions.max_cost_usd, excluded.max_cost_usd),
+                max_duration_ms = MAX(sessions.max_duration_ms, excluded.max_duration_ms),
+                last_tokens_in  = excluded.last_tokens_in,
+                last_tokens_out = excluded.last_tokens_out,
+                last_cache_write = excluded.last_cache_write,
+                last_cache_read  = excluded.last_cache_read
+            """,
+            rec,
+        )
 
     if commit:
         conn.commit()
@@ -549,6 +652,7 @@ def get_project_summary(
                 AVG(ctx_pct)                         AS avg_ctx
             FROM metrics
             WHERE project_id = ? {acct_clause} {ts_clause}
+              AND {_NO_ANOMALY}
             GROUP BY session_id
         )
         SELECT
@@ -583,6 +687,7 @@ def get_project_summary(
     models_sql = f"""
         SELECT DISTINCT model FROM metrics
         WHERE project_id = ? {acct_clause} {models_ts_clause}
+          AND {_NO_ANOMALY}
     """
     models_rows = conn.execute(models_sql, models_params).fetchall()
     result["models_used"] = [r["model"] for r in models_rows]
@@ -621,6 +726,7 @@ def get_all_projects_summary(
                 AVG(ctx_pct) AS avg_ctx
             FROM metrics
             WHERE 1=1 {ts_clause} {acct_clause}
+              AND {_NO_ANOMALY}
             GROUP BY session_id
         )
         SELECT
@@ -677,6 +783,7 @@ def get_metrics_timeseries(
             COUNT(*)            AS samples
         FROM metrics
         WHERE project_id = ? AND ts >= ? AND ts <= ? {acct_clause}
+          AND {_NO_ANOMALY}
         GROUP BY bucket_ts
         ORDER BY bucket_ts ASC
     """
@@ -715,6 +822,7 @@ def get_metrics_timeseries_all(
             COUNT(*) AS samples
         FROM metrics
         WHERE ts >= ? AND ts <= ? {acct_clause}
+          AND {_NO_ANOMALY}
         GROUP BY {bucket}
         ORDER BY bucket_ts ASC
     """
@@ -755,6 +863,7 @@ def get_activity_per_bucket(
                 MAX(tokens_in) - MIN(tokens_in) AS delta_in
             FROM metrics
             WHERE ts >= ? AND ts <= ? {proj_clause} {acct_clause}
+              AND {_NO_ANOMALY}
             GROUP BY bucket_ts, session_id
         )
         SELECT
@@ -786,6 +895,7 @@ def get_burn_rate(
             SELECT session_id, ts, tokens_out
             FROM metrics
             WHERE ts >= ? {acct_clause}
+              AND {_NO_ANOMALY}
         ),
         session_deltas AS (
             SELECT session_id, MAX(tokens_out) - MIN(tokens_out) AS delta_out
@@ -846,6 +956,7 @@ def get_rate_growth_per_hour(
                 FROM metrics
                 WHERE ts >= ? {acct_clause}
                   AND {rate_col} > 0
+                  AND {_NO_ANOMALY}
                 GROUP BY hour_bucket, {resets_col}
                 HAVING COUNT(*) >= 2 AND MAX({rate_col}) - MIN({rate_col}) > 0
             )
@@ -880,6 +991,7 @@ def get_rate_limits_current(
             ts
         FROM metrics
         WHERE (rate_5h_pct > 0 OR rate_7d_pct > 0) {acct_clause}
+          AND {_NO_ANOMALY}
         ORDER BY ts DESC
         LIMIT 1
     """
@@ -918,6 +1030,7 @@ def get_rate_limits_history(
         FROM metrics
         WHERE ts >= ? AND ts <= ? {acct_clause}
           AND (rate_5h_pct > 0 OR rate_7d_pct > 0)
+          AND {_NO_ANOMALY}
         GROUP BY ts / 300
         ORDER BY ts ASC
         LIMIT 2000
@@ -957,6 +1070,7 @@ def get_context_window_analysis(
             COUNT(*)      AS total_records
         FROM metrics
         WHERE ts >= ? {acct_clause} {proj_clause}
+          AND {_NO_ANOMALY}
     """
     row = conn.execute(stats_sql, params).fetchone()
     result = _row_to_dict(row) if row else {
@@ -973,6 +1087,7 @@ def get_context_window_analysis(
                 LAG(ctx_pct) OVER (PARTITION BY session_id ORDER BY ts) AS prev_ctx
             FROM metrics
             WHERE ts >= ? {acct_clause} {proj_clause}
+              AND {_NO_ANOMALY}
         )
         SELECT COUNT(*) AS compressions_count
         FROM ordered
@@ -1023,6 +1138,7 @@ def get_global_stats(
                 MAX(lines_removed) - MIN(lines_removed) AS d_lr
             FROM metrics
             WHERE 1=1 {acct_clause}
+              AND {_NO_ANOMALY}
             GROUP BY session_id
         )
     """
@@ -1040,7 +1156,7 @@ def get_global_stats(
     # First seen fallback (with account filter)
     if not result.get("first_seen"):
         fs_row = conn.execute(
-            f"SELECT MIN(ts) AS fs FROM metrics WHERE 1=1 {acct_clause}",
+            f"SELECT MIN(ts) AS fs FROM metrics WHERE 1=1 {acct_clause} AND {_NO_ANOMALY}",
             acct_params,
         ).fetchone()
         result["first_seen"] = fs_row["fs"] if fs_row and fs_row["fs"] else 0
@@ -1085,7 +1201,7 @@ def get_sessions(
     period_cols = ""
     period_params: list[Any] = []
     if from_ts is not None and to_ts is not None:
-        period_join = """
+        period_join = f"""
             LEFT JOIN (
                 SELECT session_id,
                        MAX(tokens_in) - MIN(tokens_in) AS period_tokens_in,
@@ -1094,6 +1210,7 @@ def get_sessions(
                        MAX(duration_ms) - MIN(duration_ms) AS period_duration_ms
                 FROM metrics
                 WHERE ts >= ? AND ts <= ?
+                  AND {_NO_ANOMALY}
                 GROUP BY session_id
             ) p ON p.session_id = s.session_id"""
         period_cols = """,
@@ -1132,8 +1249,10 @@ def get_sessions(
                    m1.ctx_size AS last_ctx_size,
                    m1.ctx_pct  AS last_ctx_pct
             FROM metrics m1
-            WHERE m1.ts = (SELECT MAX(m2.ts) FROM metrics m2
-                           WHERE m2.session_id = m1.session_id)
+            WHERE COALESCE(m1.anomaly, 0) = 0
+              AND m1.ts = (SELECT MAX(m2.ts) FROM metrics m2
+                           WHERE m2.session_id = m1.session_id
+                             AND COALESCE(m2.anomaly, 0) = 0)
         ) lc ON lc.session_id = s.session_id
         LEFT JOIN (
             SELECT session_id, COUNT(*) AS compressions
@@ -1141,7 +1260,7 @@ def get_sessions(
                 SELECT session_id, ctx_pct,
                        LAG(ctx_pct) OVER (PARTITION BY session_id ORDER BY ts) AS prev_ctx
                 FROM metrics
-                WHERE ctx_pct > 0
+                WHERE ctx_pct > 0 AND {_NO_ANOMALY}
             )
             WHERE prev_ctx IS NOT NULL AND prev_ctx - ctx_pct > 20
             GROUP BY session_id
@@ -1182,6 +1301,7 @@ def get_response_time(
                 LAG(tokens_in) OVER (PARTITION BY session_id ORDER BY ts) AS prev_tokens_in
             FROM metrics
             WHERE project_id = ? AND ts >= ? AND ts <= ? {acct_clause}
+              AND {_NO_ANOMALY}
         )
         SELECT
             ts,
@@ -1232,6 +1352,7 @@ def compute_rate_windows(conn: sqlite3.Connection) -> int:
                     MAX({rate_col}) AS max_rate
                 FROM metrics
                 WHERE {resets_col} > 0 AND {rate_col} > 0
+                  AND {_NO_ANOMALY}
                 GROUP BY {norm}, session_id
             ),
             window_agg AS (
@@ -1335,6 +1456,7 @@ def predict_exhaustion(
             WHERE ts >= ? {acct_clause}
               AND {rate_col} IS NOT NULL
               AND {rate_col} > 0
+              AND {_NO_ANOMALY}
             ORDER BY ts ASC
         """
         rows = conn.execute(sql, params).fetchall()
